@@ -1262,7 +1262,7 @@ static int test_hold_amb(rtk_t *rtk)
     int i,j,stat=0;
     
     /* no fix-and-hold mode */
-    if (rtk->opt.modear!=ARMODE_FIXHOLD) return 0;
+    if (rtk->opt.modear!=ARMODE_FIXBUMP) return 0;
     
     /* reset # of continuous fixed if new ambiguity introduced */
     for (i=0;i<MAXSAT;i++) {

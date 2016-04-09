@@ -358,7 +358,7 @@ extern "C" {
 #define ARMODE_OFF  0                   /* AR mode: off */
 #define ARMODE_CONT 1                   /* AR mode: continuous */
 #define ARMODE_INST 2                   /* AR mode: instantaneous */
-#define ARMODE_FIXHOLD 3                /* AR mode: fix and hold */
+#define ARMODE_FIXBUMP 3                /* AR mode: fix and bump */
 #define ARMODE_WLNL 4                   /* AR mode: wide lane/narrow lane */
 #define ARMODE_TCAR 5                   /* AR mode: triple carrier ar */
 
@@ -977,12 +977,14 @@ typedef struct {        /* processing options type */
     int sateph;         /* satellite ephemeris/clock (EPHOPT_???) */
     int modear;         /* AR mode (0:off,1:continuous,2:instantaneous,3:fix and hold,4:ppp-ar) */
     int glomodear;      /* GLONASS AR mode (0:off,1:on,2:auto cal,3:ext cal) */
+    int gpsmodear;      /* BeiDou AR mode (0:off,1:on) */
     int bdsmodear;      /* BeiDou AR mode (0:off,1:on) */
     int maxout;         /* obs outage count to reset bias */
     int minlock;        /* min lock count to fix ambiguity */
 	int minfixsats;     /* min sats to fix integer ambiguities */
-	int minholdsats;    /* min sats to hold integer ambiguities */
-    int minfix;         /* min fix count to hold ambiguity */
+	int minholdsats;    /* min sats to bump integer ambiguities */
+    int minfix;         /* min fix count to bump ambiguity */
+	int arbumpcnt;		/* count interval to bump ambiguity */
     int armaxiter;      /* max iteration to resolve ambiguity */
     int ionoopt;        /* ionosphere option (IONOOPT_???) */
     int tropopt;        /* troposphere option (TROPOPT_???) */
@@ -1104,6 +1106,7 @@ typedef struct {        /* satellite status type */
     double azel[2];     /* azimuth/elevation angles {az,el} (rad) */
     double resp[NFREQ]; /* residuals of pseudorange (m) */
     double resc[NFREQ]; /* residuals of carrier-phase (m) */
+	double icbias[NFREQ];  /* glonass IC bias (cycles) */
     unsigned char vsat[NFREQ]; /* valid satellite flag */
     unsigned char snr [NFREQ]; /* signal strength (0.25 dBHz) */
     unsigned char fix [NFREQ]; /* ambiguity fix flag (1:fix,2:float,3:hold) */
