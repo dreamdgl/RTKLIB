@@ -504,8 +504,8 @@ static void udpos(rtk_t *rtk, double tt)
     matmul("NN",rtk->nx,rtk->nx,rtk->nx,1.0,F,rtk->P,0.0,FP);
     matmul("NT",rtk->nx,rtk->nx,rtk->nx,1.0,FP,F,0.0,rtk->P);
     
-    // set diag elements of accel terms of covar matrix of system noise to 
-    // process noise inputs (x,y=accelh z=accelv)
+    /* set diag elements of accel terms of covar matrix of system noise to
+       process noise inputs (x,y=accelh z=accelv) */
     Q[0]=Q[4]=SQR(rtk->opt.prn[3]); Q[8]=SQR(rtk->opt.prn[4]);
     ecef2pos(rtk->x,pos);
     covecef(pos,Q,Qv);
@@ -761,17 +761,17 @@ static void udbias(rtk_t *rtk, double tt, const obsd_t *obs, const int *sat,
         for (i=j=0,offset=0.0;i<ns;i++) {
             
             if (rtk->opt.ionoopt!=IONOOPT_IFLC) {
-                // phase diff between rover and base in cycles
+                /* phase diff between rover and base in cycles */
                 cp=sdobs(obs,iu[i],ir[i],f);
-                // pseudorange diff between rover and base in meters
+                /* pseudorange diff between rover and base in meters */
                 pr=sdobs(obs,iu[i],ir[i],f+NFREQ);
                 lami=nav->lam[sat[i]-1][f];
                 if (cp==0.0||pr==0.0||lami<=0.0) continue;
                 
-                // translate cycles diff to meters and subtract pseudorange diff
+                /* translate cycles diff to meters and subtract pseudorange diff */
                 bias[i]=cp*lami-pr;
             }
-            else {  // use ionosphere free calc with 2 freqs 
+            else {  /* use ionosphere free calc with 2 freqs */ 
                 cp1=sdobs(obs,iu[i],ir[i],0);
                 cp2=sdobs(obs,iu[i],ir[i],1);
                 pr1=sdobs(obs,iu[i],ir[i],NFREQ);
@@ -784,7 +784,7 @@ static void udbias(rtk_t *rtk, double tt, const obsd_t *obs, const int *sat,
                 C2=-SQR(lam1)/(SQR(lam2)-SQR(lam1));
                 bias[i]=(C1*lam1*cp1+C2*lam2*cp2)-(C1*pr1+C2*pr2);
             }
-            // offset = sum of (bias - phase-bias) for all valid sats in meters
+            /* offset = sum of (bias - phase-bias) for all valid sats in meters */
             if (rtk->x[IB(sat[i],f,&rtk->opt)]!=0.0) {
                 lami=nav->lam[sat[i]-1][f];
                 offset+=bias[i]-rtk->x[IB(sat[i],f,&rtk->opt)]*lami;
@@ -796,7 +796,7 @@ static void udbias(rtk_t *rtk, double tt, const obsd_t *obs, const int *sat,
             /* correct phase-bias offset to ensure phase-code coherency */
             if (j>0) {
                 for (i=1;i<=MAXSAT;i++) {
-                    // distribute total offset evenly over phase-biases for all valid sats
+                    /* distribute total offset evenly over phase-biases for all valid sats */
                     if (rtk->x[IB(i,f,&rtk->opt)]!=0.0) {
                         lami=nav->lam[i-1][f];
                         rtk->x[IB(i,f,&rtk->opt)]+=offset/lami/j;
@@ -805,7 +805,7 @@ static void udbias(rtk_t *rtk, double tt, const obsd_t *obs, const int *sat,
             }
             rtk->com_bias=0;
         }
-        else rtk->com_bias=j>0?offset/j:0; // save offset for initialization below
+        else rtk->com_bias=j>0?offset/j:0; /* save offset for initialization below */
 
     
         /* set initial states of phase-bias for uninitialized satellites */
@@ -917,12 +917,12 @@ static int zdres(int base, const obsd_t *obs, int n, const double *rs,
     
     trace(3,"zdres   : n=%d\n",n);
     
-    // init residuals to zero
+    /* init residuals to zero */
     for (i=0;i<n*nf*2;i++) y[i]=0.0;
     
     if (norm(rr,3)<=0.0) return 0; /* no receiver position */
     
-    // rr_ = local copy of rcvr pos
+    /* rr_ = local copy of rcvr pos */
     for (i=0;i<3;i++) rr_[i]=rr[i];
     
     /* adjust rcvr pos for earth tide correction */
@@ -931,10 +931,10 @@ static int zdres(int base, const obsd_t *obs, int n, const double *rs,
                  opt->odisp[base],disp);
         for (i=0;i<3;i++) rr_[i]+=disp[i];
     }
-    // translate rcvr pos from ecef to geodetic
+    /* translate rcvr pos from ecef to geodetic */
     ecef2pos(rr_,pos);
     
-    // loop through satellites
+    /* loop through satellites */
     for (i=0;i<n;i++) {
         /* compute geometric-range and azimuth/elevation angle */
         if ((r=geodist(rs+i*6,rr_,e+i*3))<=0.0) continue;
@@ -991,7 +991,7 @@ static void ddcov(const int *nb, int n, const double *Ri, const double *Rj,
     trace(3,"ddcov   : n=%d\n",n);
     
     for (i=0;i<nv*nv;i++) R[i]=0.0;
-    for (b=0;b<n;k+=nb[b++]) {  // loop through each system
+    for (b=0;b<n;k+=nb[b++]) {  /* loop through each system */
         
         for (i=0;i<nb[b];i++) for (j=0;j<nb[b];j++) {
             R[k+i+(k+j)*nv]=Ri[k+i]+(i==j?Rj[k+i]:0.0);
@@ -1121,15 +1121,15 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
     
     trace(3,"ddres   : dt=%.1f nx=%d ns=%d\n",dt,rtk->nx,ns);
     
-    // bl=distance from base to rover, dr=x,y,z components
+    /* bl=distance from base to rover, dr=x,y,z components */
     bl=baseline(x,rtk->rb,dr);
-    // translate ecef pos to geodetic pos
+    /* translate ecef pos to geodetic pos */
     ecef2pos(x,posu); ecef2pos(rtk->rb,posr);
     
     Ri=mat(ns*nf*2+2,1); Rj=mat(ns*nf*2+2,1); im=mat(ns,1);
     tropu=mat(ns,1); tropr=mat(ns,1); dtdxu=mat(ns,3); dtdxr=mat(ns,3);
     
-    // zero out residual phase and code biases for all satellites
+    /* zero out residual phase and code biases for all satellites */
     for (i=0;i<MAXSAT;i++) for (j=0;j<NFREQ;j++) {
         rtk->ssat[i].resp[j]=rtk->ssat[i].resc[j]=0.0;
     }
@@ -1148,7 +1148,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
     /* step through sat systems: m=0:gps/qzs/sbs,1:glo,2:gal,3:bds */
     for (m=0;m<4;m++) { 
     
-        // step through phase/code, f=0: phase, f=1: code
+        /* step through phase/code, f=0: phase, f=1: code */
         for (f=opt->mode>PMODE_DGPS?0:nf;f<nf*2;f++) {
     
             /* find reference satellite with highest elevation, set to i */
@@ -1162,7 +1162,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
             
             /* calculate double differences of residuals (code/phase) for each sat */
             for (j=0;j<ns;j++) {
-                if (i==j) continue;  // skip ref sat
+                if (i==j) continue;  /* skip ref sat */
                 sysi=rtk->ssat[sat[i]-1].sys;
                 sysj=rtk->ssat[sat[j]-1].sys;
                 if (!test_sys(sysj,m)) continue;
@@ -1181,7 +1181,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
                 /* partial derivatives by rover position, combine unit vectors from two sats */
                 if (H) {
                     for (k=0;k<3;k++) {
-                        Hi[k]=-e[k+iu[i]*3]+e[k+iu[j]*3];  // translation of innovation to position states
+                        Hi[k]=-e[k+iu[i]*3]+e[k+iu[j]*3];  /* translation of innovation to position states */
                     }
                 }
                 if (opt->ionoopt==IONOOPT_EST) {
@@ -1208,7 +1208,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
                     /* adjust phase residual by double-differenced phase-bias term,
                           IB=look up index by sat&freq */
                     if (opt->ionoopt!=IONOOPT_IFLC) {
-                        // phase-bias states are single-differenced so need to difference them
+                        /* phase-bias states are single-differenced so need to difference them */
                         v[nv]-=lami*x[IB(sat[i],f,opt)]-lamj*x[IB(sat[j],f,opt)];
                         if (H) {
                             Hi[IB(sat[i],f,opt)]= lami;
@@ -1235,9 +1235,9 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
                     /* adjust double-difference by glonass interchannel bias correction */
                     v[nv]-=gloicbcorr(sat[i],sat[j],&rtk->opt,lami,lamj,f);
                 }
-                // save residuals
-                if (f<nf) rtk->ssat[sat[j]-1].resc[f   ]=v[nv];  // carrier phase innovations
-                else      rtk->ssat[sat[j]-1].resp[f-nf]=v[nv];  // pseudorange measurements               
+                /* save residuals */
+                if (f<nf) rtk->ssat[sat[j]-1].resc[f   ]=v[nv];  /* carrier phase innovations */
+                else      rtk->ssat[sat[j]-1].resp[f-nf]=v[nv];  /* pseudorange measurements */
 
                 /* if residual too large, flag as outlier */
     
@@ -1349,39 +1349,39 @@ static int ddmat(rtk_t *rtk, double *D)
     
     trace(3,"ddmat   :\n");
     
-    // clear fix flag for all sats (1=float, 2=fix)
+    /* clear fix flag for all sats (1=float, 2=fix) */
     for (i=0;i<MAXSAT;i++) for (j=0;j<NFREQ;j++) {
         rtk->ssat[i].fix[j]=0;
     }
-    // set diaganol elements for all non sat phase-bias states
+    /* set diaganol elements for all non sat phase-bias states */
     for (i=0;i<na;i++) D[i+i*nx]=1.0;
     
     for (m=0;m<4;m++) { /* m=0:gps/qzs/sbs,1:glo,2:gal,3:bds */
         
-        // skip if ambiguity resolution turned off for this sys
+        /* skip if ambiguity resolution turned off for this sys */
 		if (m==1&&rtk->opt.glomodear==0) continue;
         if (m==3&&rtk->opt.bdsmodear==0) continue;
         
-        // step through freqs 
+        /* step through freqs */ 
         for (f=0,k=na;f<nf;f++,k+=MAXSAT) {
             
-            // look for first valid sat (i=state index, i-k=sat index)
+            /* look for first valid sat (i=state index, i-k=sat index) */
             for (i=k;i<k+MAXSAT;i++) {
-                // skip if sat not active
+                /* skip if sat not active */
                 if (rtk->x[i]==0.0||!test_sys(rtk->ssat[i-k].sys,m)||
                     !rtk->ssat[i-k].vsat[f]) {
                     continue;
                 }
-                // set sat to use for fixing ambiguity if meets criteria
+                /* set sat to use for fixing ambiguity if meets criteria */
                 if (rtk->ssat[i-k].lock[f]>0&&!(rtk->ssat[i-k].slip[f]&2)&&
                     rtk->ssat[i-k].azel[1]>=rtk->opt.elmaskar) {
                     rtk->ssat[i-k].fix[f]=2; /* fix */
-                    break;// break out of loop if find good sat
+                    break;/* break out of loop if find good sat */
                 }
-                // else don't use this sat for fixing ambiguity
+                /* else don't use this sat for fixing ambiguity */
                 else rtk->ssat[i-k].fix[f]=1;
             }
-            // step through all sats (j=state index, j-k=sat index, i-k=first good sat)
+            /* step through all sats (j=state index, j-k=sat index, i-k=first good sat) */
             for (j=k;j<k+MAXSAT;j++) {
                 if (i==j||rtk->x[j]==0.0||!test_sys(rtk->ssat[j-k].sys,m)||
                     !rtk->ssat[j-k].vsat[f]) {
@@ -1390,14 +1390,14 @@ static int ddmat(rtk_t *rtk, double *D)
                 if (rtk->ssat[j-k].lock[f]>0&&!(rtk->ssat[j-k].slip[f]&2)&&
                     rtk->ssat[i-k].vsat[f]&&
                     rtk->ssat[j-k].azel[1]>=rtk->opt.elmaskar) {
-                    // set D coeffs to subtract sat j from sat i
+                    /* set D coeffs to subtract sat j from sat i */
                     D[i+(na+nb)*nx]= 1.0;
                     D[j+(na+nb)*nx]=-1.0;
-                    // inc # of sats used for fix
+                    /* inc # of sats used for fix */
                     nb++;
                     rtk->ssat[j-k].fix[f]=2; /* fix */
                 }
-                // else don't use this sat for fixing ambiguity
+                /* else don't use this sat for fixing ambiguity */
                 else rtk->ssat[j-k].fix[f]=1;
             }
         }
@@ -1412,8 +1412,8 @@ static void restamb(rtk_t *rtk, const double *bias, int nb, double *xa)
     
     trace(3,"restamb :\n");
     
-    for (i=0;i<rtk->nx;i++) xa[i]=rtk->x [i];  // init all fixed states to float state values
-    for (i=0;i<rtk->na;i++) xa[i]=rtk->xa[i];  // overwrite non phase-bias states with fixed values
+    for (i=0;i<rtk->nx;i++) xa[i]=rtk->x [i];  /* init all fixed states to float state values */
+    for (i=0;i<rtk->na;i++) xa[i]=rtk->xa[i];  /* overwrite non phase-bias states with fixed values */
     
     for (m=0;m<4;m++) for (f=0;f<nf;f++) {
         
@@ -1464,7 +1464,7 @@ static void holdamb(rtk_t *rtk, const double *xa)
             nv++;
         }
     }
-    if (nv>=rtk->opt.minholdsats-1) {  // nv=sat pairs, so subtract 1
+    if (nv>=rtk->opt.minholdsats-1) {  /* nv=sat pairs, so subtract 1 */
         R=zeros(nv,nv);
         for (i=0;i<nv;i++) R[i+i*nv]=VAR_HOLDAMB;
         
@@ -1494,19 +1494,19 @@ static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa)
     /* Create single to double-difference transformation matrix (D')
           used to translate phase biases to double difference */
     D=zeros(nx,nx);
-    if ((nb=ddmat(rtk,D))<(rtk->opt.minfixsats-1)) {  // nb is sat pairs
+    if ((nb=ddmat(rtk,D))<(rtk->opt.minfixsats-1)) {  /* nb is sat pairs */
         errmsg(rtk,"not enough valid double-differences\n");
         free(D);
         return 0;
     }
-    // nx=# of float states, na=# of fixed states, nb=# of double-diff phase biases
+    /* nx=# of float states, na=# of fixed states, nb=# of double-diff phase biases */
     ny=na+nb; y=mat(ny,1); Qy=mat(ny,ny); DP=mat(ny,nx);
     b=mat(nb,2); db=mat(nb,1); Qb=mat(nb,nb); Qab=mat(na,nb); QQ=mat(na,nb);
     
     /* transform single to double-differenced phase-bias (y=D'*x, Qy=D'*P*D) */
-    matmul("TN",ny, 1,nx,1.0,D ,rtk->x,0.0,y );   // y=D'*x
-    matmul("TN",ny,nx,nx,1.0,D ,rtk->P,0.0,DP);   // DP=D'*P
-    matmul("NN",ny,ny,nx,1.0,DP,D     ,0.0,Qy);   // Qy=DP'*D
+    matmul("TN",ny, 1,nx,1.0,D ,rtk->x,0.0,y );   /* y=D'*x */
+    matmul("TN",ny,nx,nx,1.0,D ,rtk->P,0.0,DP);   /* DP=D'*P */
+    matmul("NN",ny,ny,nx,1.0,DP,D     ,0.0,Qy);   /* Qy=DP'*D */
     
     /* phase-bias covariance (Qb) and real-parameters to bias covariance (Qab) */
     for (i=0;i<nb;i++) for (j=0;j<nb;j++) Qb [i+j*nb]=Qy[na+i+(na+j)*ny];
@@ -1539,15 +1539,15 @@ static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa)
                 bias[i]=b[i];
                 y[na+i]-=b[i];
             }
-            // adjust non phase-bias states and covariances using fixed solution values
-            if (!matinv(Qb,nb)) {  // returns 0 if inverse successful
-                // rtk->xa = rtk->x-Qab*Qb^-1*(b0-b)
-                matmul("NN",nb,1,nb, 1.0,Qb ,y+na,0.0,db); // db = Qb^-1*(b0-b)
-                matmul("NN",na,1,nb,-1.0,Qab,db  ,1.0,rtk->xa); // rtk->xa = rtk->x-Qab*db
+            /* adjust non phase-bias states and covariances using fixed solution values */
+            if (!matinv(Qb,nb)) {  /* returns 0 if inverse successful */
+                /* rtk->xa = rtk->x-Qab*Qb^-1*(b0-b) */
+                matmul("NN",nb,1,nb, 1.0,Qb ,y+na,0.0,db); /* db = Qb^-1*(b0-b) */
+                matmul("NN",na,1,nb,-1.0,Qab,db  ,1.0,rtk->xa); /* rtk->xa = rtk->x-Qab*db */
                 
                 /* rtk->Pa=rtk->P-Qab*Qb^-1*Qab') */
-                matmul("NN",na,nb,nb, 1.0,Qab,Qb ,0.0,QQ);  // QQ = Qab*Qb^-1
-                matmul("NT",na,na,nb,-1.0,QQ ,Qab,1.0,rtk->Pa); // rtk->Pa = rtk->P-QQ*Qab'
+                matmul("NN",na,nb,nb, 1.0,Qab,Qb ,0.0,QQ);  /* QQ = Qab*Qb^-1 */
+                matmul("NT",na,na,nb,-1.0,QQ ,Qab,1.0,rtk->Pa); /* rtk->Pa = rtk->P-QQ*Qab' */
                 
                 trace(3,"resamb : validation ok (nb=%d ratio=%.2f s=%.2f/%.2f)\n",
                       nb,s[0]==0.0?0.0:s[1]/s[0],s[0],s[1]);
@@ -1636,26 +1636,26 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     
     trace(3,"relpos  : nx=%d nu=%d nr=%d\n",rtk->nx,nu,nr);
     
-    // time diff between base and rover observations (usually zero)
+    /* time diff between base and rover observations (usually zero) */
     dt=timediff(time,obs[nu].time);
     
-    // define local matrices, n=total observations, base + rover
-    rs=mat(6,n);            // range to satellites
-    dts=mat(2,n);           // satellite clock biases
+    /* define local matrices, n=total observations, base + rover */
+    rs=mat(6,n);            /* range to satellites */
+    dts=mat(2,n);           /* satellite clock biases */
     var=mat(1,n);
     y=mat(nf*2,n);
     e=mat(3,n);
-    azel=zeros(2,n);        // [az, el]
+    azel=zeros(2,n);        /* [az, el] */
 
-    // init satellite status arrays
+    /* init satellite status arrays */
     for (i=0;i<MAXSAT;i++) {
-        rtk->ssat[i].sys=satsys(i+1,NULL);                                  // gps system
-        for (j=0;j<NFREQ;j++) rtk->ssat[i].vsat[j]=rtk->ssat[i].snr[j]=0;   // valid satellite
+        rtk->ssat[i].sys=satsys(i+1,NULL);                                  /* gps system */
+        for (j=0;j<NFREQ;j++) rtk->ssat[i].vsat[j]=rtk->ssat[i].snr[j]=0;   /* valid satellite */
     }
     /* compute satellite positions, velocities and clocks */
     satposs(time,obs,n,nav,opt->sateph,rs,dts,var,svh);
     
-    /* calculate [range - measured pseudorange] for base station (phase and code) 
+    /* calculate [range - measured pseudorange] for base station (phase and code)
          output is in y[nu:nu+nr], see call for rover below for more details                                                 */
     if (!zdres(1,obs+nu,nr,rs+nu*6,dts+nu*2,svh+nu,nav,rtk->rb,opt,1,
                y+nu*nf*2,e+nu*3,azel+nu*2)) {
@@ -1680,7 +1680,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     
     trace(4,"x(0)="); tracemat(4,rtk->x,1,NR(opt),13,4);
     
-    // initialize Pp,xa to zero, xp to rtk->x
+    /* initialize Pp,xa to zero, xp to rtk->x */
     xp=mat(rtk->nx,1); Pp=zeros(rtk->nx,rtk->nx); xa=mat(rtk->nx,1);
     matcpy(xp,rtk->x,rtk->nx,1);
     
@@ -1738,7 +1738,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         }
         trace(4,"x(%d)=",i+1); tracemat(4,xp,1,NR(opt),13,4);
     }
-    // calc zero diff residuals again after kalman filter update
+    /* calc zero diff residuals again after kalman filter update */
     if (stat!=SOLQ_NONE&&zdres(0,obs,nu,rs,dts,svh,nav,xp,opt,0,y,e,azel)) {
         
         /* calc double diff residuals again after kalman filter update for float solution */
@@ -1782,7 +1782,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     /*    bias and xa are fixed solution outputs and are only updated if the ambiguities are resolved */
     else if (stat!=SOLQ_NONE&&resamb_LAMBDA(rtk,bias,xa)>1) {
         
-        // find zero-diff residuals for fixed solution
+		/* find zero-diff residuals for fixed solution */
         if (zdres(0,obs,nu,rs,dts,svh,nav,xa,opt,0,y,e,azel)) {
             
             /* post-fit residuals for fixed solution (xa includes fixed phase biases, rtk->xa does not) */
@@ -1810,7 +1810,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         rtk->sol.qr[4]=(float)rtk->Pa[1+2*rtk->na];
         rtk->sol.qr[5]=(float)rtk->Pa[2];
     }
-    else {  // float solution
+    else {  /* float solution */
         for (i=0;i<3;i++) {
             rtk->sol.rr[i]=rtk->x[i];
             rtk->sol.qr[i]=(float)rtk->P[i+i*rtk->nx];
@@ -1831,8 +1831,8 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         rtk->ssat[sat[i]-1].snr[j]=obs[iu[i]].SNR[j];
     }
     for (i=0;i<MAXSAT;i++) for (j=0;j<nf;j++) {
-		// Don't lose track of which sats were used to try and resolve the ambiguities
-        //if (rtk->ssat[i].fix[j]==2&&stat!=SOLQ_FIX) rtk->ssat[i].fix[j]=1;
+        /* Don't lose track of which sats were used to try and resolve the ambiguities */
+        /* if (rtk->ssat[i].fix[j]==2&&stat!=SOLQ_FIX) rtk->ssat[i].fix[j]=1; */
         if (rtk->ssat[i].slip[j]&1) rtk->ssat[i].slipc[j]++;
     }
     free(rs); free(dts); free(var); free(y); free(e); free(azel);

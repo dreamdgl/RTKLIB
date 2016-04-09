@@ -107,23 +107,23 @@ static int search(int n, int m, const double *L, const double *D,
     zb[k]=zs[k];
     z[k]=ROUND(zb[k]);
 	y=zb[k]-z[k];
-	step[k]=SGN(y);  // step towards closest integer
+	step[k]=SGN(y);  /* step towards closest integer */
     for (c=0;c<LOOPMAX;c++) {
-        newdist=dist[k]+y*y/D[k];  // newdist=sum(((z(j)-zb(j))^2/d(j)))
+        newdist=dist[k]+y*y/D[k];  /* newdist=sum(((z(j)-zb(j))^2/d(j))) */
         if (newdist<maxdist) {
-            //Case 1: move down
+            /* Case 1: move down */
             if (k!=0) {
                 dist[--k]=newdist;
                 for (i=0;i<=k;i++)
                     S[k+i*n]=S[k+1+i*n]+(z[k+1]-zb[k+1])*L[k+1+i*n];
                 zb[k]=zs[k]+S[k+k*n];
-                z[k]=ROUND(zb[k]); // next valid integer
+                z[k]=ROUND(zb[k]); /* next valid integer */
 				y=zb[k]-z[k];
 				step[k]=SGN(y);
             }
-            //Case 2: store the found candidate and try next valid integer
+            /* Case 2: store the found candidate and try next valid integer */
             else {
-                if (nn<m) {  // store the first m initial points
+                if (nn<m) {  /* store the first m initial points */
                     if (nn==0||newdist>s[imax]) imax=nn;
                     for (i=0;i<n;i++) zn[i+nn*n]=z[i];
                     s[nn++]=newdist;
@@ -136,17 +136,17 @@ static int search(int n, int m, const double *L, const double *D,
                     }
                     maxdist=s[imax];
                 }
-                z[0]+=step[0]; // next valid integer
+                z[0]+=step[0]; /* next valid integer */
 				y=zb[0]-z[0];
 				step[0]=-step[0]-SGN(step[0]);
             }
         }
-        //Case 3: exit or move up
+        /* Case 3: exit or move up */
         else {
             if (k==n-1) break;
             else {
-                k++;  // move up
-                z[k]+=step[k];  // next valid integer
+                k++;  /* move up */
+                z[k]+=step[k];  /* next valid integer */
 				y=zb[k]-z[k];
 				step[k]=-step[k]-SGN(step[k]);
             }
@@ -198,7 +198,7 @@ extern int lambda(int n, int m, const double *a, const double *Q, double *F,
         /* mlambda search 
 		    z = transformed double-diff phase biases
 			L,D = transformed covariance matrix */
-        if (!(info=search(n,m,L,D,z,E,s))) {  // returns 0 if no error
+        if (!(info=search(n,m,L,D,z,E,s))) {  /* returns 0 if no error */
             
             info=solve("T",Z,E,n,m,F); /* F=Z'\E */
         }
