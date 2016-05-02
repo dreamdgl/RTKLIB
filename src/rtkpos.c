@@ -598,7 +598,7 @@ static void detslp_ll(rtk_t *rtk, const obsd_t *obs, int i, int rcv)
     unsigned char slip,LLI1,LLI2,LLI;
     int f,sat=obs[i].sat;
     
-    trace(3,"detslp_ll: i=%d rcv=%d\n",i,rcv);
+    trace(4,"detslp_ll: i=%d rcv=%d\n",i,rcv);
     
     for (f=0;f<rtk->opt.nf;f++) {
         
@@ -634,7 +634,7 @@ static void detslp_gf_L1L2(rtk_t *rtk, const obsd_t *obs, int i, int j,
     int sat=obs[i].sat;
     double g0,g1;
     
-    trace(3,"detslp_gf_L1L2: i=%d j=%d\n",i,j);
+    trace(4,"detslp_gf_L1L2: i=%d j=%d\n",i,j);
     
     if (rtk->opt.nf<=1||(g1=gfobs_L1L2(obs,i,j,nav->lam[sat-1]))==0.0) return;
     
@@ -655,7 +655,7 @@ static void detslp_gf_L1L5(rtk_t *rtk, const obsd_t *obs, int i, int j,
     int sat=obs[i].sat;
     double g0,g1;
     
-    trace(3,"detslp_gf_L1L5: i=%d j=%d\n",i,j);
+    trace(4,"detslp_gf_L1L5: i=%d j=%d\n",i,j);
     
     if (rtk->opt.nf<=2||(g1=gfobs_L1L5(obs,i,j,nav->lam[sat-1]))==0.0) return;
     
@@ -678,7 +678,7 @@ static void detslp_dop(rtk_t *rtk, const obsd_t *obs, int i, int rcv,
     int f,sat=obs[i].sat;
     double tt,dph,dpt,lam,thres;
     
-    trace(3,"detslp_dop: i=%d rcv=%d\n",i,rcv);
+    trace(4,"detslp_dop: i=%d rcv=%d\n",i,rcv);
     
     for (f=0;f<rtk->opt.nf;f++) {
         if (obs[i].L[f]==0.0||obs[i].D[f]==0.0||rtk->ph[rcv-1][sat-1][f]==0.0) {
@@ -960,11 +960,11 @@ static int zdres(int base, const obsd_t *obs, int n, const double *rs,
     trace(4,"rr_=%.3f %.3f %.3f\n",rr_[0],rr_[1],rr_[2]);
     trace(4,"pos=%.9f %.9f %.3f\n",pos[0]*R2D,pos[1]*R2D,pos[2]);
     for (i=0;i<n;i++) {
-        trace(4,"sat=%2d %13.3f %13.3f %13.3f %13.10f %6.1f %5.1f\n",
+        trace(3,"sat=%2d %13.3f %13.3f %13.3f %13.10f %6.1f %5.1f\n",
               obs[i].sat,rs[i*6],rs[1+i*6],rs[2+i*6],dts[i*2],azel[i*2]*R2D,
               azel[1+i*2]*R2D);
     }
-    trace(4,"y=\n"); tracemat(4,y,nf*2,n,13,3);
+    trace(3,"y=\n"); tracemat(3,y,nf*2,n,13,3);
     
     return 1;
 }
@@ -1264,7 +1264,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
                     rtk->ssat[sat[i]-1].vsat[f-nf]=rtk->ssat[sat[j]-1].vsat[f-nf]=1;
                 }
     
-                trace(4,"sat=%3d-%3d %s%d v=%13.3f R=%8.6f %8.6f\n",sat[i],
+                trace(3,"sat=%3d-%3d %s%d v=%13.3f R=%8.6f %8.6f\n",sat[i],
                       sat[j],f<nf?"L":"P",f%nf+1,v[nv],Ri[nv],Rj[nv]);
                 
                 vflg[nv++]=(sat[i]<<16)|(sat[j]<<8)|((f<nf?0:1)<<4)|(f%nf);
@@ -1346,6 +1346,7 @@ static double intpres(gtime_t time, const obsd_t *obs, int n, const nav_t *nav,
 static int ddmat(rtk_t *rtk, double *D)
 {
     int i,j,k,m,f,nb=0,nx=rtk->nx,na=rtk->na,nf=NF(&rtk->opt);
+    double fix[MAXSAT],ref[MAXSAT];
     
     trace(3,"ddmat   :\n");
     
@@ -1394,7 +1395,8 @@ static int ddmat(rtk_t *rtk, double *D)
                     D[i+(na+nb)*nx]= 1.0;
                     D[j+(na+nb)*nx]=-1.0;
                     /* inc # of sats used for fix */
-                    nb++;
+                    ref[nb]=i-k+1;
+                    fix[nb++]=j-k+1;
                     rtk->ssat[j-k].fix[f]=2; /* fix */
                 }
                 /* else don't use this sat for fixing ambiguity */
@@ -1403,6 +1405,11 @@ static int ddmat(rtk_t *rtk, double *D)
         }
     }
     trace(5,"D=\n"); tracemat(5,D,nx,na+nb,2,0);
+
+    if (nb>0) {
+        trace(3,"refSats=");tracemat(3,ref,1,nb,2,0);
+        trace(3,"fixSats=");tracemat(3,fix,1,nb,2,0);
+    }
     return nb;
 }
 /* translate double diff fixed phase-bias values to single diff fix phase-bias values */
@@ -1484,11 +1491,13 @@ static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa)
     double *D,*DP,*y,*Qy,*b,*db,*Qb,*Qab,*QQ,s[2];
     
     trace(3,"resamb_LAMBDA : nx=%d\n",nx);
+	trace(3,"P[0]=%.6f\n",rtk->P[0]);
     
     rtk->sol.ratio=0.0;
     
-    if (rtk->opt.mode<=PMODE_DGPS||rtk->opt.modear==ARMODE_OFF||
-        rtk->opt.thresar[0]<1.0) {
+    /* skip AR if AR threshold too small or position variance too large */
+	if (rtk->opt.mode<=PMODE_DGPS||rtk->opt.modear==ARMODE_OFF||
+        rtk->opt.thresar[0]<1.0 || rtk->P[0]>=rtk->opt.thresar[1]) {
         return 0;
     }
     /* Create single to double-difference transformation matrix (D')
@@ -1512,15 +1521,15 @@ static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa)
     for (i=0;i<nb;i++) for (j=0;j<nb;j++) Qb [i+j*nb]=Qy[na+i+(na+j)*ny];
     for (i=0;i<na;i++) for (j=0;j<nb;j++) Qab[i+j*na]=Qy[   i+(na+j)*ny];
     
-    trace(4,"N(0)="); tracemat(4,y+na,1,nb,10,3);
+    trace(3,"N(0)="); tracemat(3,y+na,1,nb,10,3);
     
     /* lambda/mlambda integer least-square estimation */
     /* return best integer solutions
     /* b are best integer solutions, s are residuals */
     if (!(info=lambda(nb,2,y+na,Qb,b,s))) {
         
-        trace(4,"N(1)="); tracemat(4,b   ,1,nb,10,3);
-        trace(4,"N(2)="); tracemat(4,b+nb,1,nb,10,3);
+        trace(3,"N(1)="); tracemat(3,b   ,1,nb,10,3);
+        trace(3,"N(2)="); tracemat(3,b+nb,1,nb,10,3);
         
         rtk->sol.ratio=s[0]>0?(float)(s[1]/s[0]):0.0f;
         if (rtk->sol.ratio>999.9) rtk->sol.ratio=999.9f;
@@ -1791,7 +1800,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
             /* validation of fixed solution, always returns valid */
             if (valpos(rtk,v,R,vflg,nv,4.0)) {
                 
-                /* hold integer ambiguity */
+                /* hold integer ambiguity if meet minfix count */
                 if (++rtk->nfix>=rtk->opt.minfix&&
                     rtk->opt.modear==ARMODE_FIXHOLD) {
                     holdamb(rtk,xa);
