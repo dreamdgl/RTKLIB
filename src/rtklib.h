@@ -47,7 +47,7 @@ extern "C" {
 
 /* constants -----------------------------------------------------------------*/
 
-#define VER_RTKLIB  "2.4.3 demo2"             /* library version */
+#define VER_RTKLIB  "2.4.3 demo3"             /* library version */
 
 #define PATCH_LEVEL "b8"                /* patch level */
 
@@ -861,6 +861,7 @@ typedef struct {        /* solution type */
     unsigned char ns;   /* number of valid satellites */
     float age;          /* age of differential (s) */
     float ratio;        /* AR ratio factor for valiation */
+	float prev_ratio;   /* previous AR ratio factor for valiation */
     float thres;        /* AR ratio threshold for valiation */
 } sol_t;
 
@@ -977,7 +978,9 @@ typedef struct {        /* processing options type */
     int sateph;         /* satellite ephemeris/clock (EPHOPT_???) */
     int modear;         /* AR mode (0:off,1:continuous,2:instantaneous,3:fix and hold,4:ppp-ar) */
     int glomodear;      /* GLONASS AR mode (0:off,1:on,2:auto cal,3:ext cal) */
+    int gpsmodear;      /* GPS AR mode (0:off,1:on) */
     int bdsmodear;      /* BeiDou AR mode (0:off,1:on) */
+	int arfilter;      /* AR filtering to reject bad sats (0:off,1:on) */
     int maxout;         /* obs outage count to reset bias */
     int minlock;        /* min lock count to fix ambiguity */
 	int minfixsats;     /* min sats to fix integer ambiguities */
@@ -1104,6 +1107,7 @@ typedef struct {        /* satellite status type */
     double azel[2];     /* azimuth/elevation angles {az,el} (rad) */
     double resp[NFREQ]; /* residuals of pseudorange (m) */
     double resc[NFREQ]; /* residuals of carrier-phase (m) */
+	double icbias[NFREQ];  /* glonass IC bias (cycles) */
     unsigned char vsat[NFREQ]; /* valid satellite flag */
     unsigned char snr [NFREQ]; /* signal strength (0.25 dBHz) */
     unsigned char fix [NFREQ]; /* ambiguity fix flag (1:fix,2:float,3:hold) */
