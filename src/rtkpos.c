@@ -479,7 +479,7 @@ static void udpos(rtk_t *rtk, double tt)
         }
     }
     /* static mode */
-    if (rtk->opt.mode==PMODE_STATIC) return;
+    if (rtk->opt.mode==PMODE_STATIC||rtk->opt.mode==PMODE_STATIC_START) return;
     
     /* kinmatic mode without dynamics */
     if (!rtk->opt.dynamics) {
@@ -1260,7 +1260,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
 					}
 				}
 				
-                /* save residuals */
+				/* save residuals */
                 if (f<nf) rtk->ssat[sat[j]-1].resc[f   ]=v[nv];  /* carrier phase innovations */
                 else      rtk->ssat[sat[j]-1].resp[f-nf]=v[nv];  /* pseudorange measurements */
 
@@ -1557,7 +1557,8 @@ static void holdamb(rtk_t *rtk, const double *xa)
 			}
 		}
 	}
-
+	/* switch to kinematic after hold if in static-start mode */
+	if (rtk->opt.mode==PMODE_STATIC_START) rtk->opt.mode=PMODE_KINEMA;
 }
 /* resolve integer ambiguity by LAMBDA ---------------------------------------*/
 static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa,int gps,int glo,int sbs)
