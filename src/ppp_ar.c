@@ -36,7 +36,7 @@ static const char rcsid[]="$Id:$";
 
 /* number and index of ekf states */
 #define NF(opt)     ((opt)->ionoopt==IONOOPT_IFLC?1:(opt)->nf)
-#define NP(opt)     ((opt)->dynamics?9:3)
+#define NP(opt)     ((opt)->dynamics==DYNOPT_ON?9:3)
 #define NC(opt)     (NSYS)
 #define NT(opt)     ((opt)->tropopt<TROPOPT_EST?0:((opt)->tropopt==TROPOPT_EST?1:3))
 #define NI(opt)     ((opt)->ionoopt==IONOOPT_EST?MAXSAT:0)

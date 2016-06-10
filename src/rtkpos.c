@@ -67,7 +67,7 @@ static const char rcsid[]="$Id:$";
 
 /* number of parameters (pos,ionos,tropos,hw-bias,phase-bias,real,estimated) */
 #define NF(opt)     ((opt)->ionoopt==IONOOPT_IFLC?1:(opt)->nf)
-#define NP(opt)     ((opt)->dynamics==0?3:9)
+#define NP(opt)     ((opt)->dynamics==DYNOPT_ON?9:3)
 #define NI(opt)     ((opt)->ionoopt!=IONOOPT_EST?0:MAXSAT)
 #define NT(opt)     ((opt)->tropopt<TROPOPT_EST?0:((opt)->tropopt<TROPOPT_ESTG?2:6))
 #define NL(opt)     ((opt)->glomodear!=2?0:NFREQGLO)
@@ -242,7 +242,7 @@ extern int rtkoutstat(rtk_t *rtk, char *buff)
                    0.0,0.0,0.0);
     }
     /* receiver velocity and acceleration */
-    if (est&&rtk->opt.dynamics) {
+    if (est&&rtk->opt.dynamics==DYNOPT_ON) {
         ecef2pos(rtk->sol.rr,pos);
         ecef2enu(pos,rtk->x+3,vel);
         ecef2enu(pos,rtk->x+6,acc);
@@ -473,17 +473,27 @@ static void udpos(rtk_t *rtk, double tt)
     /* initialize position for first epoch */
     if (norm(rtk->x,3)<=0.0) {
         for (i=0;i<3;i++) initx(rtk,rtk->sol.rr[i],VAR_POS,i);
-        if (rtk->opt.dynamics) {
-            for (i=3;i<6;i++) initx(rtk,rtk->sol.rr[i],VAR_VEL,i);
+        if (rtk->opt.dynamics==DYNOPT_ON) {
+		for (i=3;i<6;i++) initx(rtk,rtk->sol.rr[i],VAR_VEL,i);
             for (i=6;i<9;i++) initx(rtk,1E-6,VAR_ACC,i);
         }
     }
     /* static mode */
     if (rtk->opt.mode==PMODE_STATIC||rtk->opt.mode==PMODE_STATIC_START) return;
     
-    /* kinmatic mode without dynamics */
-    if (!rtk->opt.dynamics) {
-        for (i=0;i<3;i++) initx(rtk,rtk->sol.rr[i],VAR_POS,i);
+    /* kinematic mode without kalman filter dynamics */
+    if (rtk->opt.dynamics!=DYNOPT_ON) {
+        for (i=0;i<3;i++) {
+			if (rtk->opt.dynamics==DYNOPT_OFF) {
+				/* dynamics off, use single point position */
+				initx(rtk,rtk->sol.rr[i],VAR_POS,i);
+			} else if (rtk->opt.dynamics==DYNOPT_STATIC) {
+				/* dynamics off, use previous position */
+				initx(rtk,rtk->x[i],VAR_POS,i);
+			} else { /* pseudo dynamics, use previous pos + delta pos */
+				initx(rtk,rtk->x[i]+rtk->sol.x[i+3]*tt,VAR_POS,i); 
+			}
+		}
         return;
     }
     /* check variance of estimated postion */
@@ -1933,7 +1943,12 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     /* save solution status (fixed or float) */
     if (stat==SOLQ_FIX) {
         for (i=0;i<3;i++) {
-            rtk->sol.rr[i]=rtk->xa[i];
+            if (rtk->opt.dynamics==DYNOPT_PSEUDO) { /* pseudo dynamics */
+				/* simple estimate of velocity */
+				rtk->sol.x[i+3]=rtk->tt>0?(rtk->xa[i]-rtk->sol.x[i])/rtk->tt:0;
+				rtk->sol.x[i]=rtk->xa[i];
+			}
+			rtk->sol.rr[i]=rtk->xa[i];
             rtk->sol.qr[i]=(float)rtk->Pa[i+i*rtk->na];
         }
         rtk->sol.qr[3]=(float)rtk->Pa[1];
@@ -1942,7 +1957,12 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     }
     else {  /* float solution */
         for (i=0;i<3;i++) {
-            rtk->sol.rr[i]=rtk->x[i];
+			if (rtk->opt.dynamics==DYNOPT_PSEUDO) { /* pseudo dynamics */
+				/* simple estimate of velocity */
+				rtk->sol.x[i+3]=rtk->tt>0?(rtk->x[i]-rtk->sol.x[i])/rtk->tt:0;
+				rtk->sol.x[i]=rtk->x[i];
+			}
+			rtk->sol.rr[i]=rtk->x[i];
             rtk->sol.qr[i]=(float)rtk->P[i+i*rtk->nx];
         }
         rtk->sol.qr[3]=(float)rtk->P[1];
@@ -2104,7 +2124,7 @@ extern int rtkpos(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
     if (!pntpos(obs,nu,nav,&rtk->opt,&rtk->sol,NULL,rtk->ssat,msg)) {
         errmsg(rtk,"point pos error (%s)\n",msg);
         
-        if (!rtk->opt.dynamics) {
+        if (rtk->opt.dynamics!=DYNOPT_ON) {
             outsolstat(rtk,nav);
             return 0;
         }

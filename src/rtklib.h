@@ -368,6 +368,11 @@ extern "C" {
 #define SBSOPT_ICORR 4                  /* SBAS option: ionosphere correction */
 #define SBSOPT_RANGE 8                  /* SBAS option: ranging */
 
+#define DYNOPT_OFF	 0					/* dynamics off, use single point position */
+#define DYNOPT_ON    1					/* receiver dynamics enabled */
+#define DYNOPT_PSEUDO 2					/* use simple estimate of receiver position */
+#define DYNOPT_STATIC 3					/* dynamics off, use previous position */
+
 #define STR_NONE     0                  /* stream type: none */
 #define STR_SERIAL   1                  /* stream type: serial */
 #define STR_FILE     2                  /* stream type: file */
@@ -857,6 +862,7 @@ typedef struct {        /* solution type */
                         /* {c_xx,c_yy,c_zz,c_xy,c_yz,c_zx} or */
                         /* {c_ee,c_nn,c_uu,c_en,c_nu,c_ue} */
     double dtr[6];      /* receiver clock bias to time systems (s) */
+	double x[6];        /* x and v, used for pseudo dynamics */
     unsigned char type; /* type (0:xyz-ecef,1:enu-baseline) */
     unsigned char stat; /* solution status (SOLQ_???) */
     unsigned char ns;   /* number of valid satellites */

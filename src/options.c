@@ -58,6 +58,7 @@ static char snrmask_[NFREQ][1024];
 #define POSOPT  "0:llh,1:xyz,2:single,3:posfile,4:rinexhead,5:rtcm"
 #define TIDEOPT "0:off,1:on,2:otl"
 #define PHWOPT  "0:off,1:on,2:precise"
+#define DYNOPT  "0:off,1:on,2:pseudo,3:static"
 
 opt_t sysopts[]={
     {"pos1-posmode",    3,  (void *)&prcopt_.mode,       MODOPT },
@@ -69,7 +70,7 @@ opt_t sysopts[]={
     {"pos1-snrmask_L1", 2,  (void *)snrmask_[0],         ""     },
     {"pos1-snrmask_L2", 2,  (void *)snrmask_[1],         ""     },
     {"pos1-snrmask_L5", 2,  (void *)snrmask_[2],         ""     },
-    {"pos1-dynamics",   3,  (void *)&prcopt_.dynamics,   SWTOPT },
+    {"pos1-dynamics",   3,  (void *)&prcopt_.dynamics,   DYNOPT },
     {"pos1-tidecorr",   3,  (void *)&prcopt_.tidecorr,   TIDEOPT},
     {"pos1-ionoopt",    3,  (void *)&prcopt_.ionoopt,    IONOPT },
     {"pos1-tropopt",    3,  (void *)&prcopt_.tropopt,    TRPOPT },

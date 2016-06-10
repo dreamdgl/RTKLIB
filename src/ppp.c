@@ -100,7 +100,7 @@ static const char rcsid[]="$Id:$";
 
 /* number and index of states */
 #define NF(opt)     ((opt)->ionoopt==IONOOPT_IFLC?1:(opt)->nf)
-#define NP(opt)     ((opt)->dynamics?9:3)
+#define NP(opt)     ((opt)->dynamics==DYNOPT_ON?9:3)
 #define NC(opt)     (NSYS)
 #define NT(opt)     ((opt)->tropopt<TROPOPT_EST?0:((opt)->tropopt==TROPOPT_EST?1:3))
 #define NI(opt)     ((opt)->ionoopt==IONOOPT_EST?MAXSAT:0)
@@ -141,7 +141,7 @@ extern int pppoutstat(rtk_t *rtk, char *buff)
                rtk->sol.stat,x[0],x[1],x[2],STD(rtk,0),STD(rtk,1),STD(rtk,2));
     
     /* receiver velocity and acceleration */
-    if (rtk->opt.dynamics) {
+    if (rtk->opt.dynamics==DYNOPT_ON) {
         ecef2pos(rtk->sol.rr,pos);
         ecef2enu(pos,rtk->x+3,vel);
         ecef2enu(pos,rtk->x+6,acc);
