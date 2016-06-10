@@ -173,7 +173,10 @@ static gtime_t time_stat={0};    /* rtk status file time */
 *          outc     : data outage count
 *          slipc    : cycle-slip count
 *          rejc     : data reject (outlier) count
+*          icbias   : interchannel bias (GLONASS)
 *          bias     : phase bias 
+*          bias_var : variance of phase bias
+*          lambda   : wavelength
 *
 *-----------------------------------------------------------------------------*/
 extern int rtkopenstat(const char *file, int level)
@@ -349,11 +352,12 @@ static void outsolstat(rtk_t *rtk,const nav_t *nav)
         if (!ssat->vs) continue;
         satno2id(i+1,id);
         for (j=0;j<nfreq;j++) {
-            fprintf(fp_stat,"$SAT,%d,%.3f,%s,%d,%.1f,%.1f,%.4f,%.4f,%d,%.0f,%d,%d,%d,%d,%d,%d,%.5f,%.2f,%.5f\n",
+            fprintf(fp_stat,"$SAT,%d,%.3f,%s,%d,%.1f,%.1f,%.4f,%.4f,%d,%.0f,%d,%d,%d,%d,%d,%d,%.2f,%.6f,%.5f,%.5f\n",
                     week,tow,id,j+1,ssat->azel[0]*R2D,ssat->azel[1]*R2D,
                     ssat->resp[j],ssat->resc[j],ssat->vsat[j],ssat->snr[j]*0.25,
                     ssat->fix[j],ssat->slip[j]&3,ssat->lock[j],ssat->outc[j],
-                    ssat->slipc[j],ssat->rejc[j],ssat->icbias[j],rtk->x[k],nav->lam[i][j]);
+                    ssat->slipc[j],ssat->rejc[j],rtk->x[k],rtk->P[k+k*rtk->nx],
+					nav->lam[i][j],ssat->icbias[j]);
         }
     }
 }
@@ -755,6 +759,8 @@ static void udbias(rtk_t *rtk, double tt, const obsd_t *obs, const int *sat,
             if (rtk->opt.modear==ARMODE_INST||!(slip&1)) continue;
             rtk->x[j]=0.0;
             rtk->ssat[sat[i]-1].lock[f]=-rtk->opt.minlock;
+			/* retain icbiases for GLONASS sats */
+			if (rtk->ssat[sat[i]-1].sys!=SYS_GLO) rtk->ssat[sat[i]-1].icbias[f]=0;  
         }
         bias=zeros(ns,1);
         
@@ -1155,7 +1161,7 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
             /* find reference satellite with highest elevation, set to i */
             for (i=-1,j=0;j<ns;j++) {
                 sysi=rtk->ssat[sat[j]-1].sys;
-                if (!test_sys(sysi,m)) continue;
+                if (!test_sys(sysi,m) || sysi==SYS_SBS) continue;
                 if (!validobs(iu[j],ir[j],f,nf,y)) continue;
                 if (i<0||azel[1+iu[j]*2]>=azel[1+iu[i]*2]) i=j;
             }
@@ -1244,6 +1250,16 @@ static int ddres(rtk_t *rtk, const nav_t *nav, double dt, const double *x,
 						v[nv]-=gloicbcorr(sat[i],sat[j],&rtk->opt,lami,lamj,f);
 					}
 				}
+                
+				/* adjust double-difference for sbas sats */
+                if (sysj==SYS_SBS&&sysi==SYS_GPS) {
+					if (rtk->opt.glomodear==3 && ff<NFREQ) {
+						/* fix-and-hold method */
+						icb=rtk->ssat[sat[i]-1].icbias[f]*lami - rtk->ssat[sat[j]-1].icbias[f]*lamj;
+						v[nv]-=icb;
+					}
+				}
+				
                 /* save residuals */
                 if (f<nf) rtk->ssat[sat[j]-1].resc[f   ]=v[nv];  /* carrier phase innovations */
                 else      rtk->ssat[sat[j]-1].resp[f-nf]=v[nv];  /* pseudorange measurements */
@@ -1529,8 +1545,8 @@ static void holdamb(rtk_t *rtk, const double *xa)
 					index[nv++]=j;
 				}
 				else {  /* adjust the SBS sats */
-					/* find phase-bias difference */
 					if (rtk->ssat[j].sys!=SYS_SBS) continue;
+					/* find phase-bias difference */
 					dd=rtk->x[IB(j+1,f,&rtk->opt)]-rtk->x[IB(i+1,f,&rtk->opt)];
 					dd=GAIN_HOLDAMB*(dd-ROUND(dd));  /* throwout integer part of answer and multiply by filter gain */
 					rtk->x[IB(j+1,f,&rtk->opt)]-=dd;  /* remove fractional part from phase bias diff */
