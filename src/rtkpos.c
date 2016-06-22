@@ -497,18 +497,31 @@ static void udpos(rtk_t *rtk, double tt)
         trace(2,"reset rtk position due to large variance: var=%.3f\n",var);
         return;
     }
-    /* state transition of position/velocity/acceleration */
-    F=eye(rtk->nx); FP=mat(rtk->nx,rtk->nx); xp=mat(rtk->nx,1);
-    
-    for (i=0;i<6;i++) {
-        F[i+(i+3)*rtk->nx]=tt;
-    }
-    /* x=F*x, P=F*P*F+Q */
-    matmul("NN",rtk->nx,1,rtk->nx,1.0,F,rtk->x,0.0,xp);
-    matcpy(rtk->x,xp,rtk->nx,1);
-    matmul("NN",rtk->nx,rtk->nx,rtk->nx,1.0,F,rtk->P,0.0,FP);
-    matmul("NT",rtk->nx,rtk->nx,rtk->nx,1.0,FP,F,0.0,rtk->P);
-    
+
+    /**** calculate state transition of position/velocity/acceleration ****/
+	/* x=Fx, P=FPF' */
+	F=eye(9);  xp=mat(9,1); FP=mat(rtk->nx,rtk->nx);
+
+	/* generate F matrix to update position and velocity */
+	for (i=0;i<6;i++)
+        F[i+(i+3)*9]=tt;
+
+	/* x=F*x, only calculate pos/vel/acc states to save time, the rest are unchanged */
+	matmul("NN",9,1,9,1.0,F,rtk->x,0.0,xp);
+	matcpy(rtk->x,xp,9,1);
+	
+	/* P=F*P, only calc non-zero off diaganol terms to save time */
+	matcpy(FP,rtk->P,rtk->nx,rtk->nx);
+	for (j=0;j<rtk->nx;j++) 
+		for (i=0;i<6;i++) 
+			FP[i+j*rtk->nx]+=rtk->P[i+3+j*rtk->nx]*tt;
+			
+	/* P=FP*F', only calc non-zero off diaganol terms to save time  */
+	matcpy(rtk->P,FP,rtk->nx,rtk->nx);
+	for (j=0;j<rtk->nx;j++) 
+		for (i=0;i<6;i++) 
+			rtk->P[j+i*rtk->nx]+=rtk->P[j+(i+3)*rtk->nx]*tt;
+
     /* set diag elements of accel terms of covar matrix of system noise to
        process noise inputs (x,y=accelh z=accelv) */
     Q[0]=Q[4]=SQR(rtk->opt.prn[3]); Q[8]=SQR(rtk->opt.prn[4]);
@@ -1576,6 +1589,7 @@ static int resamb_LAMBDA(rtk_t *rtk, double *bias, double *xa,int gps,int glo,in
     /* skip AR if AR threshold too small or position variance too large */
 	if (rtk->opt.mode<=PMODE_DGPS||rtk->opt.modear==ARMODE_OFF||
         rtk->opt.thresar[0]<1.0 || rtk->P[0]>=rtk->opt.thresar[1]) {
+        errmsg(rtk,"position variance too large\n");
         return 0;
     }
     /* Create single to double-difference transformation matrix (D')
@@ -1716,6 +1730,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
     prcopt_t *opt=&rtk->opt;
     gtime_t time=obs[0].time;
     double *rs,*dts,*var,*y,*e,*azel,*v,*H,*R,*xp,*Pp,*xa,*bias,dt;
+	float ratio1;
     int i,j,f,n=nu+nr,ns,ny,nv,sat[MAXSAT],iu[MAXSAT],ir[MAXSAT],niter;
     int info,vflg[MAXOBS*NFREQ*2+1],svh[MAXOBS*2];
     int stat=rtk->opt.mode<=PMODE_DGPS?SOLQ_DGPS:SOLQ_FLOAT;
@@ -1873,7 +1888,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
 		gps1=1;    /* always enable gps for initial pass */
 		glo1=rtk->opt.glomodear>0?1:0;
 		result=resamb_LAMBDA(rtk,bias,xa,gps1,glo1,glo1);
-        
+        ratio1=rtk->sol.ratio;
 		/* reject bad satellites if AR filtering enabled */
 		if (rtk->opt.arfilter>0) {
 			/* if results are much poorer than previous epoch, remove new sats */
@@ -1889,6 +1904,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
 					}
 				}
 			}
+			rtk->sol.prev_ratio=ratio1;
 			/* rerun if filter removed any sats */
 			if (rerun) {
 				trace(3,"rerun AR with new sat removed\n");
@@ -1950,7 +1966,6 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         rtk->sol.qr[5]=(float)rtk->P[2];
         rtk->nfix=0;
     }
-	rtk->sol.prev_ratio=rtk->sol.ratio;
     for (i=0;i<n;i++) for (j=0;j<nf;j++) {
         if (obs[i].L[j]==0.0) continue;
         rtk->ssat[obs[i].sat-1].pt[obs[i].rcv-1][j]=obs[i].time;
