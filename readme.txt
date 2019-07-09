@@ -55,3 +55,68 @@ UPDATE HISTORY
                       add menu Map Layer of RTKPLOT
                       support solution status format as input of RTKPLOT
                       support solution status format as output of RTKNAVI
+2016/07/19  2.4.3 b13 support IRNSS
+                      support RINEX 3.03
+                      add src/rcv/cmr.c
+                      add half-cycle vaild check for ublox ubx-trk-meas
+                      add leap second before 2017/1/1 00:00:00
+                      support averaging single pos as base position
+2016/07/22  2.4.3 b14 fix a fatal bug for baseline analysis
+2016/07/29  2.4.3 b15 merge Qt port by JensReimann
+                      add output of received stream to tcp port for serial
+                      nename api compress() -> rtk_uncompress()
+                      nename api crc16()    -> rtk_crc16()
+                      nename api crc24q()   -> rtk_crc24q()
+                      nename api crc32()    -> rtk_crc32()
+2016/07/31  2.4.3 b16 fix several bugs
+                      improve draw speed of gis data in rtkplot
+                      add tcp output option of input stream from serial output
+                      add command of serial output
+                      add out-outsingle, out-maxsolstd options
+                      add commands for u-blox M8P
+2016/08/20  2.4.3 b17 fix several bugs
+                      merge pull request #180
+                      merge pull request #199
+                      merge pull request #206
+                      binary ap compiled by C++ builder 10.1 Berlin
+                      add ap rtkpost_win64, rtknavi_win64, rnx2rtkp_win64
+                      add ap rtkpost_win64, rtknavi_win64, rnx2rtkp_win64
+2016/08/20  2.4.3 b18 fix #134 (loss-of-lock not recognized in RTCM MSM 6 or 7)
+2016/08/29  2.4.3 b19 add option -STD_SLIP for u-blox receiver driver
+                      fix on half-cyc valid for sbas in u-blox trkmeas
+                      update kelper terminate condition for alm2pos(),eph2pos()
+                      fix bug on week overflow in time2gpst(),gpst2time()
+                      fix bug on starting serial thread for windows
+                      fix bug on mark and path in Google Earth view of RTKPLOT
+                      add protocol analysis in input stream monitor of STRSVR
+                      add window size extension of RTKPOST and RTKCONV
+2016/09/03  2.4.3 b20 add ntrip caster functions
+2016/09/05  2.4.3 b21 fix several bugs
+2016/09/06  2.4.3 b22 fix several bugs
+                      add app/str2str/run_cast.sh for ntrip caster control 
+2016/09/06  2.4.3 b23 fix several bugs
+                      add -sys option for rnx2rtkp
+                      add 4- and 5-panel modes for rtknavi
+2016/09/19  2.4.3 b24 fix several bugs
+                      change api rtksvrstart()
+                      add minimized panel mode of rtklaunch
+                      add relay back message of output streams to strsvr
+                      add option -b to str2str
+                      support multiple remote console connections by rtkrcv
+                      add option -w to rtkrcv
+2016/09/25  2.4.3 b25 fix several bugs
+                      add ap rtkvideo
+                      add ap rtkvplayer
+                      change build environment to C++ builder 10.1 Berlin
+2016/10/01  2.4.3 b26 fix several bugs
+                      change api rtksvrstart(), strsvrstart()
+                      support udp server and client for stream types
+                      support periodic receiver commands by rtknavi, strsvr
+2017/04/25  2.4.3 b27 fix several bugs
+2017/05/26  2.4.3 b28 fix bug on decoding skytraq extended raw message
+                      add rcv/tersus.c to support tersus BX306
+2017/09/02  2.4.3 b29 fix bugs
+2018/10/10  2.4.3 b30 support u-blox zed-f9p
+                      support api-key for gmview of rtkplot
+                      improve galileo sisa, i/nav and f/nav hadling
+                      fix many bugs

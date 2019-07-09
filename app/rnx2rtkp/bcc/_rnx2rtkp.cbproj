@@ -5,7 +5,7 @@
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Release</Config>
         <FrameworkType>None</FrameworkType>
-        <ProjectVersion>14.6</ProjectVersion>
+        <ProjectVersion>18.4</ProjectVersion>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
         <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Console</AppType>
@@ -58,6 +58,9 @@
         <Base>true</Base>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
+        <SanitizedProjectName>_rnx2rtkp</SanitizedProjectName>
+        <Icon_MainIcon>$(BDS)\bin\cbuilder_PROJECTICON.ico</Icon_MainIcon>
+        <Icns_MainIcns>$(BDS)\bin\cbuilder_PROJECTICNS.icns</Icns_MainIcns>
         <BCC_weff>false</BCC_weff>
         <Manifest_File>None</Manifest_File>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
@@ -71,7 +74,6 @@
         <BCC_PCHWithExternalTypeFiles>false</BCC_PCHWithExternalTypeFiles>
         <DCC_IncludePath>..\..\..\extion;..\..\..\extlex;..\;..\..\sbspos;..\..\sbsdump;..\..\..\src\rcv;..\..\convbin;..\..\..\src;..\..\pos2kml;G:\rtklib_2.2.0b\app\pos2kml;G:\rtklib_2.2.0b\app\pos2kml\bcc;C:\Users\ttaka\Documents\Borland Studio Projects;$(BDS)\lib;$(BDS)\lib\obj;$(DCC_IncludePath)</DCC_IncludePath>
         <ILINK_ObjectSearchPath>..\..\..\extion;..\..\..\extlex;..\;..\..\sbspos;..\..\sbsdump;..\..\..\src\rcv;..\..\convbin;..\..\..\src;..\..\pos2kml;G:\rtklib_2.2.0b\app\pos2kml;G:\rtklib_2.2.0b\app\pos2kml\bcc;$(ILINK_ObjectSearchPath)</ILINK_ObjectSearchPath>
-        <OutputExt>exe</OutputExt>
         <BCC_SmartPCHCache>false</BCC_SmartPCHCache>
         <BCC_IncludePath>..\..\..\src\rcv;..\..\convbin;..\..\pos2kml;..\..\..\src;$(BDS)\include;$(BCC_IncludePath)</BCC_IncludePath>
         <DCC_UnitSearchPath>..\..\..\extion;..\..\..\extlex;..\;..\..\sbspos;..\..\sbsdump;..\..\..\src\rcv;..\..\convbin;..\..\..\src;..\..\pos2kml;G:\rtklib_2.2.0b\app\pos2kml;G:\rtklib_2.2.0b\app\pos2kml\bcc;C:\Users\ttaka\Documents\Borland Studio Projects;$(BDS)\lib;$(BDS)\lib\obj;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
@@ -80,6 +82,7 @@
         <DCC_CBuilderOutput>JPHNE</DCC_CBuilderOutput>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
+        <OutputExt>exe</OutputExt>
         <BCC_Defines>_RTLDLL;WIN32;ENAGLO;ENAGAL;ENAQZS;ENACMP;NFREQ=3;TRACE;$(BCC_Defines)</BCC_Defines>
         <BCC_UserSuppliedOptions> -tWM -tWC -wvoi</BCC_UserSuppliedOptions>
         <TASM_Defines>_RTLDLL;_NO_VCL;WIN32;ENAGLO;ENAQZS;TRACE;$(TASM_Defines)</TASM_Defines>
@@ -290,10 +293,10 @@
                     <ProjectProperties Name="AutoShowDeps">False</ProjectProperties>
                     <ProjectProperties Name="ManagePaths">True</ProjectProperties>
                     <ProjectProperties Name="VerifyPackages">True</ProjectProperties>
+                    <ProjectProperties Name="IndexFiles">False</ProjectProperties>
                 </ProjectProperties>
             </CPlusPlusBuilder.Personality>
             <Platforms>
-                <Platform value="OSX32">False</Platform>
                 <Platform value="Win32">True</Platform>
                 <Platform value="Win64">False</Platform>
             </Platforms>
@@ -301,4 +304,5 @@
         <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>
     <Import Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')" Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj"/>
+    <Import Project="$(BDS)\Bin\CodeGear.Cpp.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Cpp.Targets')"/>
 </Project>

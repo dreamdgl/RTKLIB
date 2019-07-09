@@ -17,6 +17,7 @@
 *           2013/09/01 1.4  add check error of week, time jump, obs data range
 *           2014/08/26 1.5  fix bug on iode in glonass ephemeris
 *           2016/01/26 1.6  fix bug on unrecognized meas data (#130)
+*           2017/04/11 1.7  (char *) -> (signed char *)
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
@@ -36,11 +37,9 @@
 #define ID_XD7SMOOTH   0xd7     /* */
 #define ID_XD5BIT      0xd5     /* */
 
-static const char rcsid[]="$Id: nvs.c,v 1.0 2012/01/30 00:05:05 MBAVA Exp $";
-
 /* get fields (little-endian) ------------------------------------------------*/
 #define U1(p) (*((unsigned char *)(p)))
-#define I1(p) (*((char *)(p)))
+#define I1(p) (*((signed char *)(p)))
 static unsigned short U2(unsigned char *p) {unsigned short u; memcpy(&u,p,2); return u;}
 static unsigned int   U4(unsigned char *p) {unsigned int   u; memcpy(&u,p,4); return u;}
 static short          I2(unsigned char *p) {short          i; memcpy(&i,p,2); return i;}
@@ -48,18 +47,6 @@ static int            I4(unsigned char *p) {int            i; memcpy(&i,p,4); re
 static float          R4(unsigned char *p) {float          r; memcpy(&r,p,4); return r;}
 static double         R8(unsigned char *p) {double         r; memcpy(&r,p,8); return r;}
 
-/* ura values (ref [3] 20.3.3.3.1.1) -----------------------------------------*/
-static const double ura_eph[]={
-    2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
-    3072.0,6144.0,0.0
-};
-/* ura value (m) to ura index ------------------------------------------------*/
-static int uraindex(double value)
-{
-    int i;
-    for (i=0;i<15;i++) if (ura_eph[i]>=value) break;
-    return i;
-}
 /* decode NVS xf5-raw: raw measurement data ----------------------------------*/
 static int decode_xf5raw(raw_t *raw)
 {
@@ -103,7 +90,7 @@ static int decode_xf5raw(raw_t *raw)
     dTowGPS = dTowUTC + gpsutcTimescale;
     
     /* Tweak pseudoranges to allow Rinex to represent the NVS time of measure */
-    dTowInt  = 10.0*floor((dTowGPS/10.0)+0.5);
+    dTowInt  = (int)(10.0*floor((dTowGPS/10.0)+0.5));
     dTowFrac = dTowGPS - (double) dTowInt;
     time=gpst2time(week, dTowInt*0.001);
     
@@ -147,7 +134,7 @@ static int decode_xf5raw(raw_t *raw)
         if (sys==SYS_GLO) {
             raw->obs.data[n].L[0]  =  L1 - toff*(FREQ1_GLO+DFRQ1_GLO*carrNo);
         } else {
-            raw->obs.data[n].L[0]  =  L1 - toff*FREQ1;
+            raw->obs.data[n].L[0]  =  L1 - toff*FREQL1;
         }
         raw->obs.data[n].P[0]    = (P1-dTowFrac)*CLIGHT*0.001 - toff*CLIGHT; /* in ms, needs to be converted */
         raw->obs.data[n].D[0]    =  (float)D1;
@@ -210,7 +197,7 @@ static int decode_gpsephem(int sat, raw_t *raw)
     eph.f2     = R4(&puiTmp[114]) * 1e+3;
     eph.f1     = R4(&puiTmp[118]);
     eph.f0     = R4(&puiTmp[122]) * 1e-3;
-    eph.sva    = uraindex(I2(&puiTmp[126]));
+    eph.sva    = uraindex(I2(&puiTmp[126]),SYS_GPS);
     eph.iode   = I2(&puiTmp[128]);
     eph.iodc   = I2(&puiTmp[130]);
     eph.code   = I2(&puiTmp[132]);
@@ -265,7 +252,7 @@ static int decode_gloephem(int sat, raw_t *raw)
         geph.acc[0]=R8(p+51) * 1e+6;
         geph.acc[1]=R8(p+59) * 1e+6;
         geph.acc[2]=R8(p+67) * 1e+6;
-        tb = R8(p+75) * 1e-3;
+        tb = (int)(R8(p+75) * 1e-3);
         tk = tb;
         geph.gamn  =R4(p+83);
         geph.taun  =R4(p+87) * 1e-3;

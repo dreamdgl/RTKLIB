@@ -4,9 +4,9 @@ object InputStrDialog: TInputStrDialog
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Input Streams'
-  ClientHeight = 235
+  ClientHeight = 257
   ClientWidth = 400
-  Color = clBtnFace
+  Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -53,43 +53,64 @@ object InputStrDialog: TInputStrDialog
     Caption = 'Cmd'
   end
   object LabelF1: TLabel
-    Left = 10
-    Top = 124
+    Left = 8
+    Top = 147
     Width = 75
     Height = 13
     Caption = 'Input File Paths'
   end
   object LabelF2: TLabel
-    Left = 165
-    Top = 211
+    Left = 155
+    Top = 234
     Width = 5
     Height = 13
     Caption = 's'
   end
   object LabelF3: TLabel
-    Left = 105
-    Top = 211
+    Left = 103
+    Top = 234
     Width = 8
     Height = 13
     Caption = '+'
   end
   object LabelNmea: TLabel
     Left = 8
-    Top = 86
+    Top = 87
     Width = 185
     Height = 13
     Caption = 'Transmit NMEA GPGGA to Base Station'
   end
   object Label1: TLabel
-    Left = 372
+    Left = 375
     Top = 3
     Width = 18
     Height = 13
     Caption = 'Opt'
   end
+  object LabelResetCmd: TLabel
+    Left = 8
+    Top = 128
+    Width = 52
+    Height = 13
+    Caption = 'Reset Cmd'
+  end
+  object LabelMaxBL: TLabel
+    Left = 273
+    Top = 129
+    Width = 62
+    Height = 13
+    Caption = 'Max Baseline'
+  end
+  object LabelKm: TLabel
+    Left = 375
+    Top = 129
+    Width = 13
+    Height = 13
+    Caption = 'km'
+  end
   object StreamC2: TCheckBox
     Left = 8
-    Top = 42
+    Top = 43
     Width = 121
     Height = 17
     Caption = '(2) Base Station'
@@ -106,8 +127,8 @@ object InputStrDialog: TInputStrDialog
     OnClick = StreamC1Click
   end
   object TimeTagC: TCheckBox
-    Left = 9
-    Top = 210
+    Left = 7
+    Top = 233
     Width = 47
     Height = 17
     Caption = 'Time'
@@ -115,8 +136,8 @@ object InputStrDialog: TInputStrDialog
     OnClick = TimeTagCClick
   end
   object BtnCancel: TButton
-    Left = 313
-    Top = 206
+    Left = 311
+    Top = 229
     Width = 85
     Height = 27
     Caption = '&Cancel'
@@ -124,8 +145,8 @@ object InputStrDialog: TInputStrDialog
     TabOrder = 0
   end
   object BtnOk: TButton
-    Left = 222
-    Top = 206
+    Left = 220
+    Top = 229
     Width = 85
     Height = 27
     Caption = '&OK'
@@ -167,7 +188,7 @@ object InputStrDialog: TInputStrDialog
   end
   object Stream2: TComboBox
     Left = 120
-    Top = 40
+    Top = 41
     Width = 103
     Height = 21
     Style = csDropDownList
@@ -184,7 +205,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnStr2: TButton
     Left = 224
-    Top = 39
+    Top = 40
     Width = 25
     Height = 23
     Caption = '...'
@@ -208,7 +229,7 @@ object InputStrDialog: TInputStrDialog
   end
   object Format2: TComboBox
     Left = 275
-    Top = 40
+    Top = 41
     Width = 97
     Height = 21
     Style = csDropDownList
@@ -232,7 +253,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnCmd2: TButton
     Left = 249
-    Top = 39
+    Top = 40
     Width = 25
     Height = 23
     Caption = '...'
@@ -246,30 +267,30 @@ object InputStrDialog: TInputStrDialog
     OnClick = BtnCmd2Click
   end
   object FilePath1: TEdit
-    Left = 8
-    Top = 138
-    Width = 365
+    Left = 6
+    Top = 161
+    Width = 366
     Height = 21
     TabOrder = 24
   end
   object FilePath2: TEdit
-    Left = 8
-    Top = 160
-    Width = 365
+    Left = 6
+    Top = 183
+    Width = 366
     Height = 21
     TabOrder = 26
   end
   object TimeStartE: TEdit
-    Left = 115
-    Top = 208
-    Width = 47
+    Left = 113
+    Top = 231
+    Width = 39
     Height = 21
     TabOrder = 30
     Text = '0'
   end
   object BtnFile1: TButton
     Left = 373
-    Top = 137
+    Top = 160
     Width = 25
     Height = 23
     Caption = '...'
@@ -284,7 +305,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnFile2: TButton
     Left = 373
-    Top = 159
+    Top = 182
     Width = 25
     Height = 23
     Caption = '...'
@@ -298,9 +319,9 @@ object InputStrDialog: TInputStrDialog
     OnClick = BtnFile2Click
   end
   object NmeaReqL: TComboBox
-    Left = 8
-    Top = 100
-    Width = 117
+    Left = 7
+    Top = 102
+    Width = 120
     Height = 21
     Style = csDropDownList
     ItemIndex = 0
@@ -310,11 +331,12 @@ object InputStrDialog: TInputStrDialog
     Items.Strings = (
       'OFF'
       'Latitude/Longitude'
-      'Single Solution')
+      'Single Solution'
+      'Reset and Single Sol')
   end
   object TimeSpeedL: TComboBox
-    Left = 57
-    Top = 208
+    Left = 55
+    Top = 231
     Width = 49
     Height = 21
     DropDownCount = 20
@@ -331,24 +353,24 @@ object InputStrDialog: TInputStrDialog
       'x10')
   end
   object NmeaPos1: TEdit
-    Left = 158
-    Top = 100
-    Width = 107
+    Left = 130
+    Top = 102
+    Width = 84
     Height = 21
     TabOrder = 21
     Text = '0.000000000'
   end
   object NmeaPos2: TEdit
-    Left = 266
-    Top = 100
-    Width = 107
+    Left = 216
+    Top = 102
+    Width = 84
     Height = 21
     TabOrder = 22
     Text = '0.000000000'
   end
   object BtnPos: TButton
     Left = 373
-    Top = 99
+    Top = 101
     Width = 25
     Height = 23
     Caption = '...'
@@ -362,15 +384,15 @@ object InputStrDialog: TInputStrDialog
     OnClick = BtnPosClick
   end
   object FilePath3: TEdit
-    Left = 8
-    Top = 182
-    Width = 365
+    Left = 6
+    Top = 205
+    Width = 366
     Height = 21
     TabOrder = 31
   end
   object BtnFile3: TButton
     Left = 373
-    Top = 181
+    Top = 204
     Width = 25
     Height = 23
     Caption = '...'
@@ -385,7 +407,7 @@ object InputStrDialog: TInputStrDialog
   end
   object StreamC3: TCheckBox
     Left = 8
-    Top = 64
+    Top = 66
     Width = 121
     Height = 17
     Caption = '(3) Correction'
@@ -394,7 +416,7 @@ object InputStrDialog: TInputStrDialog
   end
   object Stream3: TComboBox
     Left = 120
-    Top = 62
+    Top = 64
     Width = 103
     Height = 21
     Style = csDropDownList
@@ -413,7 +435,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnStr3: TButton
     Left = 224
-    Top = 61
+    Top = 63
     Width = 25
     Height = 23
     Caption = '...'
@@ -428,7 +450,7 @@ object InputStrDialog: TInputStrDialog
   end
   object Format3: TComboBox
     Left = 275
-    Top = 62
+    Top = 64
     Width = 97
     Height = 21
     Style = csDropDownList
@@ -437,7 +459,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnCmd3: TButton
     Left = 249
-    Top = 61
+    Top = 63
     Width = 25
     Height = 23
     Caption = '...'
@@ -467,7 +489,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnRcvOpt2: TButton
     Left = 373
-    Top = 39
+    Top = 40
     Width = 25
     Height = 23
     Caption = '...'
@@ -482,7 +504,7 @@ object InputStrDialog: TInputStrDialog
   end
   object BtnRcvOpt3: TButton
     Left = 373
-    Top = 61
+    Top = 63
     Width = 25
     Height = 23
     Caption = '...'
@@ -495,13 +517,47 @@ object InputStrDialog: TInputStrDialog
     TabOrder = 19
     OnClick = BtnRcvOpt3Click
   end
+  object NmeaPos3: TEdit
+    Left = 302
+    Top = 102
+    Width = 70
+    Height = 21
+    TabOrder = 33
+    Text = '0.000'
+  end
+  object EditResetCmd: TEdit
+    Left = 63
+    Top = 125
+    Width = 204
+    Height = 21
+    TabOrder = 34
+  end
+  object EditMaxBL: TEdit
+    Left = 338
+    Top = 125
+    Width = 34
+    Height = 21
+    TabOrder = 35
+    Text = '10'
+  end
+  object Time64BitL: TComboBox
+    Left = 166
+    Top = 232
+    Width = 48
+    Height = 21
+    TabOrder = 36
+    Text = '32bit'
+    Items.Strings = (
+      '32bit'
+      '64bit')
+  end
   object OpenDialog: TOpenDialog
     Filter = 
       'All File (*.*)|*.*|Log File (*.log)|*.log|RTCM 2 File (*.rtcm2)|' +
       '*.rtcm2|RTCM 3 File (*.rtcm3)|*.rtcm3'
     Options = [ofHideReadOnly, ofNoChangeDir, ofEnableSizing]
     Title = 'Input File Path'
-    Left = 178
-    Top = 202
+    Left = 323
+    Top = 147
   end
 end

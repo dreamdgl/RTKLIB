@@ -17,9 +17,9 @@ __fastcall TCodeOptDialog::TCodeOptDialog(TComponent* Owner)
 //---------------------------------------------------------------------------
 void __fastcall TCodeOptDialog::FormShow(TObject *Sender)
 {
-	char mask[6][64]={""};
+	char mask[7][64]={""};
 	
-	for (int i=0;i<6;i++) strcpy(mask[i],ConvOptDialog->CodeMask[i].c_str());
+	for (int i=0;i<7;i++) strcpy(mask[i],ConvOptDialog->CodeMask[i].c_str());
 	G01->Checked=mask[0][ 0]=='1';
 	G02->Checked=mask[0][ 1]=='1';
 	G03->Checked=mask[0][ 2]=='1';
@@ -81,15 +81,23 @@ void __fastcall TCodeOptDialog::FormShow(TObject *Sender)
 	J35->Checked=mask[3][34]=='1';
 	J36->Checked=mask[3][35]=='1';
 	J33->Checked=mask[3][32]=='1';
-	C47->Checked=mask[5][46]=='1';
-	C48->Checked=mask[5][47]=='1';
-	C12->Checked=mask[5][11]=='1';
+	C40->Checked=mask[5][39]=='1';
+	C41->Checked=mask[5][40]=='1';
+	C18->Checked=mask[5][11]=='1';
 	C27->Checked=mask[5][26]=='1';
 	C28->Checked=mask[5][27]=='1';
 	C29->Checked=mask[5][28]=='1';
 	C42->Checked=mask[5][41]=='1';
 	C43->Checked=mask[5][42]=='1';
 	C33->Checked=mask[5][32]=='1';
+	I49->Checked=mask[6][48]=='1';
+	I50->Checked=mask[6][49]=='1';
+	I51->Checked=mask[6][50]=='1';
+	I26->Checked=mask[6][25]=='1';
+	I52->Checked=mask[6][51]=='1';
+	I53->Checked=mask[6][52]=='1';
+	I54->Checked=mask[6][53]=='1';
+	I55->Checked=mask[6][54]=='1';
 	S01->Checked=mask[4][ 0]=='1';
 	S24->Checked=mask[4][23]=='1';
 	S25->Checked=mask[4][24]=='1';
@@ -100,9 +108,9 @@ void __fastcall TCodeOptDialog::FormShow(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TCodeOptDialog::BtnOkClick(TObject *Sender)
 {
-	char mask[6][64]={""};
+	char mask[7][64]={""};
 	
-	for (int i=0;i<6;i++) for (int j=0;j<MAXCODE;j++) mask[i][j]='0';
+	for (int i=0;i<7;i++) for (int j=0;j<MAXCODE;j++) mask[i][j]='0';
 	if (G01->Checked) mask[0][ 0]='1';
 	if (G02->Checked) mask[0][ 1]='1';
 	if (G03->Checked) mask[0][ 2]='1';
@@ -164,20 +172,28 @@ void __fastcall TCodeOptDialog::BtnOkClick(TObject *Sender)
 	if (J35->Checked) mask[3][34]='1';
 	if (J36->Checked) mask[3][35]='1';
 	if (J33->Checked) mask[3][32]='1';
-	if (C47->Checked) mask[5][46]='1';
-	if (C48->Checked) mask[5][47]='1';
-	if (C12->Checked) mask[5][11]='1';
+	if (C40->Checked){mask[5][39]='1';mask[5][46]='1';}
+	if (C41->Checked){mask[5][40]='1';mask[5][47]='1';}
+	if (C18->Checked){mask[5][17]='1';mask[5][11]='1';}
 	if (C27->Checked) mask[5][26]='1';
 	if (C28->Checked) mask[5][27]='1';
 	if (C29->Checked) mask[5][28]='1';
 	if (C42->Checked) mask[5][41]='1';
 	if (C43->Checked) mask[5][42]='1';
 	if (C33->Checked) mask[5][32]='1';
+	if (I49->Checked) mask[6][48]='1';
+	if (I50->Checked) mask[6][49]='1';
+	if (I51->Checked) mask[6][50]='1';
+	if (I26->Checked) mask[6][25]='1';
+	if (I52->Checked) mask[6][51]='1';
+	if (I53->Checked) mask[6][52]='1';
+	if (I54->Checked) mask[6][53]='1';
+	if (I55->Checked) mask[6][54]='1';
 	if (S01->Checked) mask[4][ 0]='1';
 	if (S24->Checked) mask[4][23]='1';
 	if (S25->Checked) mask[4][24]='1';
 	if (S26->Checked) mask[4][25]='1';
-	for (int i=0;i<6;i++) ConvOptDialog->CodeMask[i]=mask[i];
+	for (int i=0;i<7;i++) ConvOptDialog->CodeMask[i]=mask[i];
 }
 //---------------------------------------------------------------------------
 void __fastcall TCodeOptDialog::BtnSetAllClick(TObject *Sender)
@@ -245,15 +261,23 @@ void __fastcall TCodeOptDialog::BtnSetAllClick(TObject *Sender)
 	J35->Checked=set;
 	J36->Checked=set;
 	J33->Checked=set;
-	C47->Checked=set;
-	C48->Checked=set;
-	C12->Checked=set;
+	C40->Checked=set;
+	C41->Checked=set;
+	C18->Checked=set;
 	C27->Checked=set;
 	C28->Checked=set;
 	C29->Checked=set;
 	C42->Checked=set;
 	C43->Checked=set;
 	C33->Checked=set;
+	I49->Checked=set;
+	I50->Checked=set;
+	I51->Checked=set;
+	I26->Checked=set;
+	I52->Checked=set;
+	I53->Checked=set;
+	I54->Checked=set;
+	I55->Checked=set;
 	S01->Checked=set;
 	S24->Checked=set;
 	S25->Checked=set;
@@ -299,17 +323,17 @@ void __fastcall TCodeOptDialog::UpdateEnable(void)
 	E24->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L5);
 	E25->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L5);
 	E26->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L5);
-	E27->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L7);
-	E28->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L7);
-	E29->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L7);
-	E30->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L6);
-	E31->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L6);
-	E32->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L6);
-	E33->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L6);
-	E34->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L6);
-	E37->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L8);
-	E38->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L8);
-	E39->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_L8);
+	E27->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5b);
+	E28->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5b);
+	E29->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5b);
+	E30->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E6);
+	E31->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E6);
+	E32->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E6);
+	E33->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E6);
+	E34->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E6);
+	E37->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5ab);
+	E38->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5ab);
+	E39->Enabled=(NavSys&SYS_GAL)&&(FreqType&FREQTYPE_E5ab);
 	J01->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L1);
 	J07->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L1);
 	J08->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L1);
@@ -318,21 +342,29 @@ void __fastcall TCodeOptDialog::UpdateEnable(void)
 	J16->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L2);
 	J17->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L2);
 	J18->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L2);
-	J24->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L5);
-	J25->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L5);
-	J26->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L5);
-	J35->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L6);
-	J36->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L6);
-	J33->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_L6);
-	C47->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L1);
-	C48->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L1);
-	C12->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L1);
-	C27->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L7);
-	C28->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L7);
-	C29->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L7);
-	C42->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L6);
-	C43->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L6);
-	C33->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L6);
+	J24->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E5b);
+	J25->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E5b);
+	J26->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E5b);
+	J35->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E6);
+	J36->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E6);
+	J33->Enabled=(NavSys&SYS_QZS)&&(FreqType&FREQTYPE_E6);
+	C40->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L2);
+	C41->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L2);
+	C18->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_L2);
+	C27->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E5b);
+	C28->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E5b);
+	C29->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E5b);
+	C42->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E6);
+	C43->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E6);
+	C33->Enabled=(NavSys&SYS_CMP)&&(FreqType&FREQTYPE_E6);
+	I49->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_L5);
+	I50->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_L5);
+	I51->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_L5);
+	I26->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_L5);
+	I52->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_S);
+	I53->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_S);
+	I54->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_S);
+	I55->Enabled=(NavSys&SYS_IRN)&&(FreqType&FREQTYPE_S);
 	S01->Enabled=(NavSys&SYS_SBS)&&(FreqType&FREQTYPE_L1);
 	S24->Enabled=(NavSys&SYS_SBS)&&(FreqType&FREQTYPE_L5);
 	S25->Enabled=(NavSys&SYS_SBS)&&(FreqType&FREQTYPE_L5);

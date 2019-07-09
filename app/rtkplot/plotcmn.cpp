@@ -4,6 +4,8 @@
 #include "rtklib.h"
 #include "plotmain.h"
 
+#define SQR(x)  ((x)*(x))
+
 //---------------------------------------------------------------------------
 extern "C" {
 int showmsg(char *format,...) {return 0;}
@@ -16,7 +18,7 @@ const char *PTypes[]={
 // show message in status-bar -----------------------------------------------
 void __fastcall TPlot::ShowMsg(AnsiString msg)
 {
-    Message1->Caption=A2U(msg);
+    Message1->Caption=msg;
     Panel21->Repaint();
 }
 // execute command ----------------------------------------------------------
@@ -97,19 +99,23 @@ int __fastcall TPlot::GetCurrentPos(double *rr)
 // get center position of plot ----------------------------------------------
 int __fastcall TPlot::GetCenterPos(double *rr)
 {
-    double xc,yc,pos[3],enu[3]={0},dr[3];
-    int i;
+    double xc,yc,opos[3],pos[3],enu[3]={0},dr[3];
+    int i,j;
     
     trace(3,"GetCenterPos\n");
     
     if (PLOT_OBS<=PlotType&&PlotType<=PLOT_DOP&&PlotType!=PLOT_TRK) return 0;
     if (norm(OPos,3)<=0.0) return 0;
     GraphT->GetCent(xc,yc);
-    ecef2pos(OPos,pos);
+    ecef2pos(OPos,opos);
     enu[0]=xc;
     enu[1]=yc;
-    enu2ecef(pos,enu,dr);
-    for (int i=0;i<3;i++) rr[i]=OPos[i]+dr[i];
+    for (i=0;i<6;i++) {
+        enu2ecef(opos,enu,dr);
+        for (j=0;j<3;j++) rr[j]=OPos[j]+dr[j];
+        ecef2pos(rr,pos);
+        enu[2]-=pos[2];
+    }
     return 1;
 }
 // get position, velocity or accel from solutions ---------------------------
@@ -138,6 +144,7 @@ TIMEPOS * __fastcall TPlot::SolToPos(solbuf_t *sol, int index, int qflag, int ty
         
         PosToXyz(data->time,data->rr,data->type,xyz);
         CovToXyz(data->rr,data->qr,data->type,xyzs);
+        if (xyz[2]<-RE_WGS84) continue;
         
         pos->t  [pos->n]=data->time;
         pos->x  [pos->n]=xyz [0];
@@ -181,6 +188,7 @@ TIMEPOS * __fastcall TPlot::SolToNsat(solbuf_t *sol, int index, int qflag)
         ns->x[ns->n]=data->ns;
         ns->y[ns->n]=data->age;
         ns->z[ns->n]=data->ratio;
+        ns->zs[ns->n]=data->thres;
         ns->q[ns->n]=data->stat;
         ns->n++;
         
@@ -195,7 +203,7 @@ void __fastcall TPlot::PosToXyz(gtime_t time, const double *rr, int type,
     double opos[3],pos[3],r[3],enu[3];
     int i;
     
-    trace(4,"SolToXyz:\n");
+    trace(4,"PosToXyz:\n");
     
     if (type==0) { // xyz
         for (i=0;i<3;i++) {
@@ -286,8 +294,8 @@ TColor __fastcall TPlot::ObsColor(const obsd_t *obs, double az, double el)
 {
     TColor color=clBlack;
     AnsiString ObsType_Text;
-    char *code="";
-    int i;
+    char *code="",*codeType="";
+    int i,frq,frqType,sys;
     
     trace(4,"ObsColor\n");
     
@@ -295,18 +303,22 @@ TColor __fastcall TPlot::ObsColor(const obsd_t *obs, double az, double el)
     
     if (PlotType==PLOT_SNR||PlotType==PLOT_SNRE) {
         ObsType_Text=ObsType2->Text;
-        code=ObsType_Text.c_str()+1;
+        codeType=ObsType_Text.c_str()+1;
+        frqType=ObsType2->ItemIndex;
     }
     else if (ObsType->ItemIndex) {
         ObsType_Text=ObsType->Text;
-        code=ObsType_Text.c_str()+1;
+        codeType=ObsType_Text.c_str()+1;
+        frqType=ObsType->ItemIndex;
     }
     if (SimObs) {
         color=SysColor(obs->sat);
     }
-    else if (*code) {
+    else if (*codeType) {
         for (i=0;i<NFREQ+NEXOBS;i++) {
-            if (!strstr(code2obs(obs->code[i],NULL),code)) continue;
+            sys=satsys(obs->sat,NULL);
+            code=code2obs(sys,obs->code[i],&frq);
+            if (frq!=frqType&&!strstr(code,codeType)) continue;
             color=SnrColor(obs->SNR[i]*0.25);
             break;
         }
@@ -396,6 +408,7 @@ int __fastcall TPlot::SearchPos(int x, int y)
         if (QFlag->ItemIndex&&data->stat!=QFlag->ItemIndex) continue;
         
         PosToXyz(data->time,data->rr,data->type,xyz);
+        if (xyz[2]<-RE_WGS84) continue;
         
         if (SQR(xp-xyz[0])+SQR(yp-xyz[1])<=SQR(r)) return i;
     }
@@ -443,21 +456,21 @@ AnsiString __fastcall TPlot::LatLonStr(const double *pos, int ndec)
                   ndec+5,ndec,fabs(pos[1]*R2D),pos[1]<0.0?"W":"E");
     }
     else {
-        deg2dms(pos[0]*R2D,dms1);
-        deg2dms(pos[1]*R2D,dms2);
+        deg2dms(pos[0]*R2D,dms1,ndec-5);
+        deg2dms(pos[1]*R2D,dms2,ndec-5);
         s.sprintf("%3.0f" CHARDEG "%02.0f'%0*.*f\"%s %4.0f" CHARDEG "%02.0f'%0*.*f\"%s",
                   fabs(dms1[0]),dms1[1],ndec-2,ndec-5,dms1[2],pos[0]<0.0?"S":"N",
                   fabs(dms2[0]),dms2[1],ndec-2,ndec-5,dms2[2],pos[1]<0.0?"W":"E");
     }
     return s;
 }
-// convert unicode to ansistring --------------------------------------------
+// convert unicode to UTF-8 ansistring --------------------------------------
 AnsiString __fastcall TPlot::U2A(UnicodeString str)
 {
     AnsiString a_str(str);
     return a_str;
 }
-// convert ansi to unicodestring --------------------------------------------
+// convert UTF-8 ansi to unicodestring --------------------------------------
 UnicodeString __fastcall TPlot::A2U(AnsiString str)
 {
     wchar_t buff[256]={0};

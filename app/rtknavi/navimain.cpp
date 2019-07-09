@@ -1,12 +1,14 @@
 //---------------------------------------------------------------------------
 // rtknavi : real-time positioning ap
 //
-//          Copyright (C) 2007-2014 by T.TAKASU, All rights reserved.
+//          Copyright (C) 2007-2017 by T.TAKASU, All rights reserved.
 //
-// options : rtknavi [-t title][-i file]
+// options : rtknavi [-t title][-i file][-auto][-tray]
 //
 //           -t title   window title
 //           -i file    ini file path
+//           -auto      auto start
+//           -tray      start as task tray icon
 //
 // version : $Revision:$ $Date:$
 // history : 2008/07/14  1.0 new
@@ -16,6 +18,7 @@
 //           2011/06/10  1.4 rtklib 2.4.1
 //           2012/04/03  1.5 rtklib 2.4.2
 //           2014/09/06  1.6 rtklib 2.4.3
+//           2017/09/01  1.7 add option -auto and -tray
 //---------------------------------------------------------------------------
 #include <vcl.h>
 #include <inifiles.hpp>
@@ -67,8 +70,9 @@ TMainForm *MainForm;
 #define MAXPORTOFF  9                   // max port number offset
 #define MAXTRKSCALE 23                  // track scale
 #define SPLITTER_WIDTH 6                // splitter width
+#define MAXPANELMODE 7                  // max panel mode
 
-#define SQRT(x)     ((x)<0.0?0.0:sqrt(x))
+#define SQRT(x)     ((x)<0.0||(x)!=(x)?0.0:sqrt(x))
 #define MIN(x,y)    ((x)<(y)?(x):(y))
 
 //---------------------------------------------------------------------------
@@ -110,12 +114,12 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
     SvrCycle=SvrBuffSize=0;
     SolBuffSize=1000;
     for (int i=0;i<8;i++) {
-        StreamC[i]=Stream[i]=Format[i]=CmdEna[i][0]=CmdEna[i][1]=0;
+        StreamC[i]=Stream[i]=Format[i]=CmdEna[i][0]=CmdEna[i][1]=CmdEna[i][2]=0;
     }
     TimeSys=SolType=PlotType1=PlotType2=FreqType1=FreqType2=0;
     TrkType1=TrkType2=0;
     TrkScale1=TrkScale2=5;
-    BLMode1=BLMode2=0;
+    BLMode1=BLMode2=BLMode3=BLMode4=0;
     PSol=PSolS=PSolE=Nsat[0]=Nsat[1]=0;
     NMapPnt=0;
     OpenPort=0;
@@ -152,7 +156,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
 void __fastcall TMainForm::FormCreate(TObject *Sender)
 {
     char *p,*argv[32],buff[1024],file[1024]="rtknavi.exe";
-    int argc=0;
+    int argc=0,autorun=0,tasktray=0;
     
     trace(3,"FormCreate\n");
     
@@ -186,10 +190,20 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
     
     for (int i=1;i<argc;i++) {
         if (!strcmp(argv[i],"-t")&&i+1<argc) Caption=argv[++i];
+        else if (!strcmp(argv[i],"-auto")) autorun=1;
+        else if (!strcmp(argv[i],"-tray")) tasktray=1;
     }
     LoadNav(&rtksvr.nav);
     
     OpenMoniPort(MoniPort);
+    
+    if (tasktray) {
+        Application->ShowMainForm=false;
+        TrayIcon->Visible=true;
+    }
+    if (autorun) {
+        SvrStart();
+    }
 }
 // callback on form show ----------------------------------------------------
 void __fastcall TMainForm::FormShow(TObject *Sender)
@@ -255,25 +269,51 @@ void __fastcall TMainForm::Panel211Resize(TObject *Sender)
     LabelNSat->Left=2; LabelNSat->Width=w-4;
     UpdatePos();
 }
-// callback panel 221 resize -------------------------------------------------
-void __fastcall TMainForm::Panel221Resize(TObject *Sender)
+// callback panel 22 resize ---------------------------------------------------
+void __fastcall TMainForm::Panel22Resize(TObject *Sender)
 {
-    trace(3,"Panel221Resize\n");
+    TPanel *panel=(TPanel *)Sender;
     
-    BtnPlotType1->Left=Panel221->Width-BtnPlotType1->Width-2;
+    trace(3,"Panel22Resize\n");
+    
+    BtnPlotType1->Left=panel->Width-BtnPlotType1->Width-2;
     BtnFreqType1->Left=BtnPlotType1->Left-BtnFreqType1->Width-2;
     UpdatePlot();
 }
-// callback panel 222 resize -------------------------------------------------
-void __fastcall TMainForm::Panel222Resize(TObject *Sender)
+// callback panel 23 resize ---------------------------------------------------
+void __fastcall TMainForm::Panel23Resize(TObject *Sender)
 {
-    trace(3,"Panel222Resize\n");
+    TPanel *panel=(TPanel *)Sender;
     
-    BtnPlotType2->Left=Panel222->Width-BtnPlotType2->Width-2;
+    trace(3,"Panel23Resize\n");
+    
+    BtnPlotType2->Left=panel->Width-BtnPlotType2->Width-2;
     BtnFreqType2->Left=BtnPlotType2->Left-BtnFreqType2->Width-2;
     UpdatePlot();
 }
-// callback panel 4 resize ---------------------------------------------------
+// callback panel 24 resize ---------------------------------------------------
+void __fastcall TMainForm::Panel24Resize(TObject *Sender)
+{
+    TPanel *panel=(TPanel *)Sender;
+    
+    trace(3,"Panel24Resize\n");
+    
+    BtnPlotType3->Left=panel->Width-BtnPlotType3->Width-2;
+    BtnFreqType3->Left=BtnPlotType3->Left-BtnFreqType3->Width-2;
+    UpdatePlot();
+}
+// callback panel 25 resize ---------------------------------------------------
+void __fastcall TMainForm::Panel25Resize(TObject *Sender)
+{
+    TPanel *panel=(TPanel *)Sender;
+    
+    trace(3,"Panel25Resize\n");
+    
+    BtnPlotType4->Left=panel->Width-BtnPlotType4->Width-2;
+    BtnFreqType4->Left=BtnPlotType4->Left-BtnFreqType4->Width-2;
+    UpdatePlot();
+}
+// callback panel 4 resize --------------------------------------------------
 void __fastcall TMainForm::Panel4Resize(TObject *Sender)
 {
     TBitBtn *btn[]={BtnStart,BtnMark,BtnPlot,BtnOpt,BtnExit};
@@ -283,14 +323,14 @@ void __fastcall TMainForm::Panel4Resize(TObject *Sender)
         btn[i]->Left=w*i+1;
         btn[i]->Top=0;
         btn[i]->Width=w-2;
-        btn[i]->Height=h;
+        btn[i]->Height=h-2;
     }
     BtnStop->Left  =BtnStart->Left;
     BtnStop->Top   =BtnStart->Top;
     BtnStop->Width =BtnStart->Width;
     BtnStop->Height=BtnStart->Height;
 }
-// callback panel 5 resize ---------------------------------------------------
+// callback panel 5 resize --------------------------------------------------
 void __fastcall TMainForm::Panel5Resize(TObject *Sender)
 {
 	BtnSolType2->Left=BtnSolType2->Parent->Width-BtnSolType2->Width-2;
@@ -298,55 +338,101 @@ void __fastcall TMainForm::Panel5Resize(TObject *Sender)
 // update panel -------------------------------------------------------------
 void __fastcall TMainForm::UpdatePanel(void)
 {
-    if (PanelMode==0) {
-        Panel21 ->Visible=true;
-        Panel5  ->Visible=false;
-        Panel221->Visible=false;
-    }
-    else if (PanelMode==1) {
-        Panel21 ->Visible=true;
-        Panel5  ->Visible=false;
-        Panel221->Visible=true;
-    }
-    else if (PanelMode==2) {
-        Panel21 ->Visible=false;
-        Panel5  ->Visible=true;
-        Panel221->Visible=true;
+    Panel21->Align=alNone;
+    Panel22->Align=alNone;
+    Panel23->Align=alNone;
+    Panel24->Align=alNone;
+    Panel25->Align=alNone;
+    Splitter1->Align=alNone;
+    Splitter2->Align=alNone;
+    Splitter3->Align=alNone;
+    Splitter4->Align=alNone;
+    
+    if (PanelMode<=3) {
+        Panel21->Visible=true;
+        Panel5 ->Visible=false;
     }
     else {
-        Panel21 ->Visible=false;
-        Panel5  ->Visible=true;
-        Panel221->Visible=false;
+        Panel21->Visible=false;
+        Panel5 ->Visible=true;
     }
+    if (PanelMode==0||PanelMode==4) {
+        Panel22->Visible=true;
+        Panel23->Visible=false;
+        Panel24->Visible=false;
+        Panel25->Visible=false;
+    }
+    else if (PanelMode==1||PanelMode==5) {
+        Panel22->Visible=true;
+        Panel23->Visible=true;
+        Panel24->Visible=false;
+        Panel25->Visible=false;
+    }
+    else if (PanelMode==2||PanelMode==6) {
+        Panel22->Visible=true;
+        Panel23->Visible=true;
+        Panel24->Visible=true;
+        Panel25->Visible=false;
+    }
+    else {
+        Panel22->Visible=true;
+        Panel23->Visible=true;
+        Panel24->Visible=true;
+        Panel25->Visible=true;
+    }
+    Splitter1->Visible=Panel21->Visible&&Panel22->Visible;
+    Splitter2->Visible=Panel22->Visible&&Panel23->Visible;
+    Splitter3->Visible=Panel23->Visible&&Panel24->Visible;
+    Splitter4->Visible=Panel24->Visible&&Panel25->Visible;
+    
     if (PanelStack==0) { // horizontal
-        Panel21 ->Align=alLeft;
-        Panel211->Align=alClient;
-        Panel221->Align=alLeft;
-        Panel222->Align=alClient;
         
-        Splitter1->Align=alNone;
-        Splitter2->Align=alNone;
-        Splitter1->Width=PanelMode==2||PanelMode==3?0:SPLITTER_WIDTH;
-        Splitter2->Width=PanelMode==0||PanelMode==3?0:SPLITTER_WIDTH;
-        Splitter1->Left=Panel21 ->Width;
-        Splitter2->Left=Panel221->Width;
+        Splitter1->Width=SPLITTER_WIDTH;
+        Splitter2->Width=SPLITTER_WIDTH;
+        Splitter3->Width=SPLITTER_WIDTH;
+        Splitter4->Width=SPLITTER_WIDTH;
+        Panel21->Left=0;
+        Splitter1->Left=Panel21->Left+Panel21->Width;
+        Panel22->Left=Splitter1->Left+Splitter1->Width;
+        Splitter2->Left=Panel22->Left+Panel22->Width;
+        Panel23->Left=Splitter2->Left+Splitter2->Width;
+        Splitter3->Left=Panel23->Left+Panel23->Width;
+        Panel24->Left=Splitter3->Left+Splitter3->Width;
+        Splitter4->Left=Panel24->Left+Panel24->Width;
+        Panel25->Left=Splitter4->Left+Splitter4->Width;
+        Panel21->Align=Panel22->Visible?alLeft:alClient;
         Splitter1->Align=alLeft;
+        Panel22->Align=Panel23->Visible?alLeft:alClient;
         Splitter2->Align=alLeft;
+        Panel23->Align=Panel24->Visible?alLeft:alClient;
+        Splitter3->Align=alLeft;
+        Panel24->Align=Panel25->Visible?alLeft:alClient;
+        Splitter4->Align=alLeft;
+        Panel25->Align=alClient;
     }
     else { // vertical
-        Panel21 ->Align=alTop;
-        Panel211->Align=alClient;
-        Panel221->Align=alTop;
-        Panel222->Align=alClient;
-        
-        Splitter1->Align=alNone;
-        Splitter2->Align=alNone;
-        Splitter1->Height=PanelMode==2||PanelMode==3?0:SPLITTER_WIDTH;
-        Splitter2->Height=PanelMode==0||PanelMode==3?0:SPLITTER_WIDTH;
-        Splitter1->Top=Panel21 ->Height;
-        Splitter2->Top=Panel221->Height;
+        Splitter1->Height=SPLITTER_WIDTH;
+        Splitter2->Height=SPLITTER_WIDTH;
+        Splitter3->Height=SPLITTER_WIDTH;
+        Splitter4->Height=SPLITTER_WIDTH;
+        Panel21->Top=0;
+        Splitter1->Top=Panel21->Top+Panel21->Height;
+        Panel22->Top=Splitter1->Top+Splitter1->Height;
+        Splitter2->Top=Panel22->Top+Panel22->Height;
+        Panel23->Top=Splitter2->Top+Splitter2->Height;
+        Splitter3->Top=Panel23->Top+Panel23->Height;
+        Panel24->Top=Splitter3->Top+Splitter3->Height;
+        Splitter4->Top=Panel24->Top+Panel24->Height;
+        Panel25->Top=Splitter4->Top+Splitter4->Height;
+        Panel21->Align=Panel22->Visible?alTop:alClient;
         Splitter1->Align=alTop;
+        Panel22->Align=Panel23->Visible?alTop:alClient;
         Splitter2->Align=alTop;
+        Panel23->Align=Panel24->Visible?alTop:alClient;
+        Splitter3->Align=alTop;
+        Panel24->Align=Panel25->Visible?alTop:alClient;
+        Splitter4->Align=alTop;
+        Panel25->Align=alClient;
     }
 }
 // update enabled -----------------------------------------------------------
@@ -354,8 +440,12 @@ void __fastcall TMainForm::UpdateEnable(void)
 {
     BtnExpand1->Visible=PlotType1==6;
     BtnShrink1->Visible=PlotType1==6;
-	BtnExpand2->Visible=PlotType2==6;
+    BtnExpand2->Visible=PlotType2==6;
     BtnShrink2->Visible=PlotType2==6;
+    BtnExpand3->Visible=PlotType3==6;
+    BtnShrink3->Visible=PlotType3==6;
+    BtnExpand4->Visible=PlotType4==6;
+    BtnShrink4->Visible=PlotType4==6;
 }
 // callback on button-exit --------------------------------------------------
 void __fastcall TMainForm::BtnExitClick(TObject *Sender)
@@ -398,7 +488,7 @@ void __fastcall TMainForm::BtnPlotClick(TObject *Sender)
 // callback on button-options -----------------------------------------------
 void __fastcall TMainForm::BtnOptClick(TObject *Sender)
 {
-    int i,chgmoni=0;
+    int i,chgmoni=0,panelstack=PanelStack;
     
     trace(3,"BtnOptClick\n");
     
@@ -426,7 +516,6 @@ void __fastcall TMainForm::BtnOptClick(TObject *Sender)
     OptDialog->TLEFileF   =TLEFileF;
     OptDialog->TLESatFileF=TLESatFileF;
     OptDialog->LocalDirectory=LocalDirectory;
-    OptDialog->InitRestart=InitRestart;
     
     OptDialog->SvrCycle   =SvrCycle;
     OptDialog->TimeoutTime=TimeoutTime;
@@ -478,7 +567,6 @@ void __fastcall TMainForm::BtnOptClick(TObject *Sender)
     TLEFileF   =OptDialog->TLEFileF;
     TLESatFileF=OptDialog->TLESatFileF;
     LocalDirectory=OptDialog->LocalDirectory;
-    InitRestart=OptDialog->InitRestart;
     
     SvrCycle   =OptDialog->SvrCycle;
     TimeoutTime=OptDialog->TimeoutTime;
@@ -495,11 +583,14 @@ void __fastcall TMainForm::BtnOptClick(TObject *Sender)
     if (MoniPort!=OptDialog->MoniPort) chgmoni=1;
     MoniPort   =OptDialog->MoniPort;
     PanelStack =OptDialog->PanelStack;
-    
     PosFont->Assign(OptDialog->PosFont);
     UpdateFont();
+    if (panelstack==0&&PanelStack==1) {
+        Panel21->Width=170;
+        Panel22->Width=170;
+        Panel23->Width=170;
+    }
     UpdatePanel();
-    
     if (SolBuffSize!=OptDialog->SolBuffSize) {
         SolBuffSize=OptDialog->SolBuffSize;
         InitSolBuff();
@@ -540,7 +631,7 @@ void __fastcall TMainForm::BtnInputStrClick(TObject *Sender)
         /* Paths[0]:serial,[1]:tcp,[2]:file,[3]:ftp */
         for (j=0;j<4;j++) InputStrDialog->Paths[i][j]=Paths[i][j];
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         InputStrDialog->CmdEna   [i][j]=CmdEna   [i][j];
         InputStrDialog->Cmds     [i][j]=Cmds     [i][j];
         InputStrDialog->CmdEnaTcp[i][j]=CmdEnaTcp[i][j];
@@ -554,8 +645,12 @@ void __fastcall TMainForm::BtnInputStrClick(TObject *Sender)
     InputStrDialog->TimeTag   =InTimeTag;
     InputStrDialog->TimeSpeed =InTimeSpeed;
     InputStrDialog->TimeStart =InTimeStart;
+    InputStrDialog->Time64Bit =InTime64Bit;
     InputStrDialog->NmeaPos[0]=NmeaPos[0];
     InputStrDialog->NmeaPos[1]=NmeaPos[1];
+    InputStrDialog->NmeaPos[2]=NmeaPos[2];
+    InputStrDialog->ResetCmd  =ResetCmd;
+    InputStrDialog->MaxBL     =MaxBL;
     
     if (InputStrDialog->ShowModal()!=mrOk) return;
     
@@ -566,7 +661,7 @@ void __fastcall TMainForm::BtnInputStrClick(TObject *Sender)
         RcvOpt [i]=InputStrDialog->RcvOpt[i];
         for (j=0;j<4;j++) Paths[i][j]=InputStrDialog->Paths[i][j];
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         CmdEna   [i][j]=InputStrDialog->CmdEna   [i][j];
         Cmds     [i][j]=InputStrDialog->Cmds     [i][j];
         CmdEnaTcp[i][j]=InputStrDialog->CmdEnaTcp[i][j];
@@ -580,15 +675,21 @@ void __fastcall TMainForm::BtnInputStrClick(TObject *Sender)
     InTimeTag  =InputStrDialog->TimeTag;
     InTimeSpeed=InputStrDialog->TimeSpeed;
     InTimeStart=InputStrDialog->TimeStart;
+    InTime64Bit=InputStrDialog->Time64Bit;
     NmeaPos[0] =InputStrDialog->NmeaPos[0];
     NmeaPos[1] =InputStrDialog->NmeaPos[1];
+    NmeaPos[2] =InputStrDialog->NmeaPos[2];
+    ResetCmd   =InputStrDialog->ResetCmd;
+    MaxBL      =InputStrDialog->MaxBL;
 }
 // confirm overwrite --------------------------------------------------------
 int __fastcall TMainForm::ConfOverwrite(const char *path)
 {
     AnsiString s;
     FILE *fp;
-    int itype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP};
+    int itype[]={
+        STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP
+    };
     int i;
     char buff1[1024],buff2[1024],*p;
     
@@ -621,7 +722,9 @@ int __fastcall TMainForm::ConfOverwrite(const char *path)
 // callback on button-output-streams ----------------------------------------
 void __fastcall TMainForm::BtnOutputStrClick(TObject *Sender)
 {
-    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
+    int otype[]={
+        STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_NTRIPC_C,STR_FILE
+    };
     int i,j,str,update[2]={0};
     char *path;
     
@@ -689,7 +792,9 @@ void __fastcall TMainForm::BtnOutputStrClick(TObject *Sender)
 // callback on button-log-streams -------------------------------------------
 void __fastcall TMainForm::BtnLogStrClick(TObject *Sender)
 {
-    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
+    int otype[]={
+        STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_NTRIPC_C,STR_FILE
+    };
     int i,j,str,update[3]={0};
     char *path;
     
@@ -755,7 +860,7 @@ void __fastcall TMainForm::BtnPanelClick(TObject *Sender)
 {
     trace(3,"BtnPanelClick\n");
     
-    if (++PanelMode>3) PanelMode=0;
+    if (++PanelMode>MAXPANELMODE) PanelMode=0;
     UpdatePanel();
 }
 // callback on button-plot-type-1 -------------------------------------------
@@ -794,6 +899,26 @@ void __fastcall TMainForm::BtnPlotType2Click(TObject *Sender)
     UpdatePos();
     UpdateEnable();
 }
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::BtnPlotType3Click(TObject *Sender)
+{
+    trace(3,"BtnPlotType3Click\n");
+    
+    if (++PlotType3>6) PlotType3=0;
+    UpdatePlot();
+    UpdatePos();
+    UpdateEnable();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::BtnPlotType4Click(TObject *Sender)
+{
+    trace(3,"BtnPlotType4Click\n");
+    
+    if (++PlotType4>6) PlotType4=0;
+    UpdatePlot();
+    UpdatePos();
+    UpdateEnable();
+}
 // callback on button frequency-type-1 --------------------------------------
 void __fastcall TMainForm::BtnFreqType1Click(TObject *Sender)
 {
@@ -827,6 +952,42 @@ void __fastcall TMainForm::BtnFreqType2Click(TObject *Sender)
     }
     else {
         if (++FreqType2>NFREQ+1) FreqType2=0;
+        UpdateSolType();
+    }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::BtnFreqType3Click(TObject *Sender)
+{
+    trace(3,"BtnFreqType3Click\n");
+    
+    if (PlotType3==6) {
+        if (++TrkType3>1) TrkType3=0;
+        UpdatePlot();
+    }
+    else if (PlotType3==5) {
+        if (++BLMode3>1) BLMode3=0;
+        UpdatePlot();
+    }
+    else {
+        if (++FreqType3>NFREQ+1) FreqType3=0;
+        UpdateSolType();
+    }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::BtnFreqType4Click(TObject *Sender)
+{
+    trace(3,"BtnFreqType4Click\n");
+    
+    if (PlotType4==6) {
+        if (++TrkType4>1) TrkType4=0;
+        UpdatePlot();
+    }
+    else if (PlotType4==5) {
+        if (++BLMode4>1) BLMode4=0;
+        UpdatePlot();
+    }
+    else {
+        if (++FreqType4>NFREQ+1) FreqType4=0;
         UpdateSolType();
     }
 }
@@ -892,6 +1053,9 @@ void __fastcall TMainForm::BtnAboutClick(TObject *Sender)
     AnsiString prog=PRGNAME;
     
     trace(3,"BtnAboutClick\n");
+#ifdef _WIN64
+    prog+="_WIN64";
+#endif
 #ifdef MKL
     prog+="_MKL";
 #endif
@@ -965,11 +1129,16 @@ void __fastcall TMainForm::SvrStart(void)
     AnsiString s;
     solopt_t solopt[2];
     double pos[3],nmeapos[3];
-    int itype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP};
-    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
+    int itype[]={
+        STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP
+    };
+    int otype[]={
+        STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_NTRIPC_C,STR_FILE
+    };
     int i,strs[MAXSTRRTK]={0},sat,ex,stropt[8]={0};
-    char *paths[8],*cmds[3]={0},*rcvopts[3]={0},buff[1024],*p;
-    char file[1024],*type;
+    char *paths[8],*cmds[3]={0},*cmds_periodic[3]={0},*rcvopts[3]={0};
+    char buff[1024],*p;
+    char file[1024],*type,errmsg[20148];
     FILE *fp;
     gtime_t time=timeget();
     pcvs_t pcvr={0},pcvs={0};
@@ -980,27 +1149,31 @@ void __fastcall TMainForm::SvrStart(void)
     Message->Caption=""; Message->Parent->Hint="";
     
     if (RovPosTypeF<=2) { // LLH,XYZ
-        PrcOpt.rovpos=0;
+        PrcOpt.rovpos=POSOPT_POS;
         PrcOpt.ru[0]=RovPos[0];
         PrcOpt.ru[1]=RovPos[1];
         PrcOpt.ru[2]=RovPos[2];
     }
     else { // RTCM position
-        PrcOpt.rovpos=4;
+        PrcOpt.rovpos=POSOPT_RTCM;
         for (i=0;i<3;i++) PrcOpt.ru[i]=0.0;
     }
     if (RefPosTypeF<=2) { // LLH,XYZ
-        PrcOpt.refpos=0;
+        PrcOpt.refpos=POSOPT_POS;
         PrcOpt.rb[0]=RefPos[0];
         PrcOpt.rb[1]=RefPos[1];
         PrcOpt.rb[2]=RefPos[2];
     }
     else if (RefPosTypeF==3) { // RTCM position
-        PrcOpt.refpos=4;
+        PrcOpt.refpos=POSOPT_RTCM;
+        for (i=0;i<3;i++) PrcOpt.rb[i]=0.0;
+    }
+    else if (RefPosTypeF==4) { // raw position
+        PrcOpt.refpos=POSOPT_RAW;
         for (i=0;i<3;i++) PrcOpt.rb[i]=0.0;
     }
     else { // average of single position
-        PrcOpt.refpos=1;
+        PrcOpt.refpos=POSOPT_SINGLE;
         for (i=0;i<3;i++) PrcOpt.rb[i]=0.0;
     }
     for (i=0;i<MAXSAT;i++) {
@@ -1068,7 +1241,7 @@ void __fastcall TMainForm::SvrStart(void)
     for (i=3;i<5;i++) strs[i]=StreamC[i]?otype[Stream[i]]:STR_NONE;
     for (i=5;i<8;i++) strs[i]=StreamC[i]?otype[Stream[i]]:STR_NONE;
     for (i=0;i<8;i++) {
-        if      (strs[i]==STR_NONE  ) paths[i]="";
+        if      (strs[i]==STR_NONE  ) paths[i]=(char *)"";
         else if (strs[i]==STR_SERIAL) paths[i]=Paths[i][0].c_str();
         else if (strs[i]==STR_FILE  ) paths[i]=Paths[i][2].c_str();
         else if (strs[i]==STR_FTP||strs[i]==STR_HTTP) paths[i]=Paths[i][3].c_str();
@@ -1077,17 +1250,19 @@ void __fastcall TMainForm::SvrStart(void)
     for (i=0;i<3;i++) {
         if (strs[i]==STR_SERIAL) {
             if (CmdEna[i][0]) cmds[i]=Cmds[i][0].c_str();
+            if (CmdEna[i][2]) cmds_periodic[i]=Cmds[i][2].c_str();
         }
         else if (strs[i]==STR_TCPCLI||strs[i]==STR_TCPSVR||
                  strs[i]==STR_NTRIPCLI) {
             if (CmdEnaTcp[i][0]) cmds[i]=CmdsTcp[i][0].c_str();
+            if (CmdEnaTcp[i][2]) cmds_periodic[i]=CmdsTcp[i][2].c_str();
         }
         rcvopts[i]=RcvOpt[i].c_str();
     }
     NmeaCycle=NmeaCycle<1000?1000:NmeaCycle;
     pos[0]=NmeaPos[0]*D2R;
     pos[1]=NmeaPos[1]*D2R;
-    pos[2]=0.0;
+    pos[2]=NmeaPos[2];
     pos2ecef(pos,nmeapos);
     
     strsetdir(LocalDirectory.c_str());
@@ -1119,11 +1294,14 @@ void __fastcall TMainForm::SvrStart(void)
     stropt[3]=SvrBuffSize;
     stropt[4]=FileSwapMargin;
     strsetopt(stropt);
+    strcpy(rtksvr.cmd_reset,ResetCmd.c_str());
+    rtksvr.bl_reset=MaxBL;
     
     // start rtk server
     if (!rtksvrstart(&rtksvr,SvrCycle,SvrBuffSize,strs,paths,Format,NavSelect,
-                     cmds,rcvopts,NmeaCycle,NmeaReq,nmeapos,&PrcOpt,solopt,
-                     &monistr)) {
+                     cmds,cmds_periodic,rcvopts,NmeaCycle,NmeaReq,nmeapos,
+                     &PrcOpt,solopt,&monistr,errmsg)) {
+        trace(2,"rtksvrstart error %s\n",errmsg);
         traceclose();
         return;
     }
@@ -1176,7 +1354,7 @@ void __fastcall TMainForm::SvrStop(void)
     ScbSol      ->Enabled=true;
     BtnStop     ->Visible=false;
     MenuStop    ->Enabled=false;
-    Svr->Color=clBtnFace;
+    Svr->Color=clWindow;
     SetTrayIcon(1);
     
     LabelTime->Font->Color=clGray;
@@ -1230,14 +1408,15 @@ void __fastcall TMainForm::TimerTimer(TObject *Sender)
     else {
         IndSol->Color=clWhite;
         Solution->Font->Color=clGray;
-        Svr->Color=rtksvr.state?clGreen:clBtnFace;
+        Svr->Color=rtksvr.state?clGreen:clWindow;
     }
     if (!(++n%5)) UpdatePlot();
     UpdateStr();
     
     // keep alive for monitor port
     if (!(++n%(KACYCLE/Timer->Interval))&&OpenPort) {
-        strwrite(&monistr,"\r",1);
+        buff[0]='\r';
+        strwrite(&monistr,buff,1);
     }
 }
 // change plot type ---------------------------------------------------------
@@ -1418,7 +1597,7 @@ void __fastcall TMainForm::UpdatePos(void)
         s[5].sprintf(L"%.3f m",len);
         s[6].sprintf(L"E:%6.3f N:%6.3f U:%6.3f m",SQRT(Qe[0]),SQRT(Qe[4]),SQRT(Qe[8]));
     }
-    s[7].sprintf(L"Age:%4.1f s Ratio:%4.1f # Sat:%2d",Age[PSol],Ratio[PSol],Nvsat[PSol]);
+    s[7].sprintf(L"Age:%4.1f s Ratio:%4.1f #Sat:%2d",Age[PSol],Ratio[PSol],Nvsat[PSol]);
     if (Ratio[PSol]>0.0) s[8].sprintf(L" R:%4.1f",Ratio[PSol]);
     
     for (i=0;i<8;i++) label[i]->Caption=s[i];
@@ -1435,7 +1614,7 @@ void __fastcall TMainForm::UpdatePos(void)
 // update stream status indicators ------------------------------------------
 void __fastcall TMainForm::UpdateStr(void)
 {
-    TColor color[]={clRed,clBtnFace,CLORANGE,clGreen,clLime};
+    TColor color[]={clRed,clWindow,CLORANGE,clGreen,clLime};
     TPanel *ind[MAXSTRRTK]={Str1,Str2,Str3,Str4,Str5,Str6,Str7,Str8};
     int i,sstat[MAXSTRRTK]={0};
     char msg[MAXSTRMSG]="";
@@ -1458,7 +1637,10 @@ void __fastcall TMainForm::DrawPlot(TImage *plot, int type, int freq)
     gtime_t time;
     TCanvas *c=plot->Canvas;
     TLabel *label[]={Plabel1,Plabel2,Plabel3,Pos1,Pos2,Pos3};
-    wchar_t *fstr[]={L"",L"L1 ",L"L2 ",L"L5 ",L"L6 ",L"L7 ",L"L8 ",L""};
+    wchar_t *fstr[]={
+        (wchar_t *)L""   ,(wchar_t *)L"L1 ",(wchar_t *)L"L2 ",(wchar_t *)L"L5 ",
+        (wchar_t *)L"L6 ",(wchar_t *)L"L7 ",(wchar_t *)L"L8 ",(wchar_t *)L""
+    };
     int w=plot->Parent->Width-2,h=plot->Parent->Height-2;
     int i,j,x,sat[2][MAXSAT],ns[2],snr[2][MAXSAT][NFREQ],vsat[2][MAXSAT];
     int *snr0[MAXSAT],*snr1[MAXSAT];
@@ -1467,7 +1649,7 @@ void __fastcall TMainForm::DrawPlot(TImage *plot, int type, int freq)
     
     trace(4,"DrawPlot\n");
     
-    fstr[NFREQ+1]=L"SYS ";
+    fstr[NFREQ+1]=(wchar_t *)L"SYS ";
     
     for (i=0;i<MAXSAT;i++) {
         snr0[i]=snr[0][i];
@@ -1540,11 +1722,11 @@ void __fastcall TMainForm::DrawPlot(TImage *plot, int type, int freq)
     }
     else if (type==2) { // skyplot rover
         DrawSat(c,w,h,0,0,0,freq);
-        s1.sprintf(L"Rover %s",fstr[!freq?1:freq]);
+        s1.sprintf(L"Rover %s",fstr[freq]);
         DrawText(c,x,1,s1,clGray,0);
     }
     else if (type==3) { // skyplot+snr plot rover
-        s1.sprintf(L"Rover %s",fstr[!freq?1:freq]);
+        s1.sprintf(L"Rover %s",fstr[freq]);
         s2.sprintf(L"SNR (dBHz)");
         if (w>=h*2) { // horizontal
             DrawSat(c,h,h,0,0,0,freq);
@@ -1559,8 +1741,8 @@ void __fastcall TMainForm::DrawPlot(TImage *plot, int type, int freq)
         }
     }
     else if (type==4) { // skyplot rover+base
-        s1.sprintf(L"Rover %s",fstr[!freq?1:freq]);
-        s2.sprintf(L"Base %s",fstr[!freq?1:freq]);
+        s1.sprintf(L"Rover %s",fstr[freq]);
+        s2.sprintf(L"Base %s",fstr[freq]);
         if (w>=h) { // horizontal
             DrawSat(c,w/2,h,0  ,0,0,freq);
             DrawSat(c,w/2,h,w/2,0,1,freq);
@@ -1586,10 +1768,22 @@ void __fastcall TMainForm::DrawPlot(TImage *plot, int type, int freq)
 // update solution plot ------------------------------------------------------
 void __fastcall TMainForm::UpdatePlot(void)
 {
-    DrawPlot(Plot1,PlotType1,FreqType1);
-    DrawPlot(Plot2,PlotType2,FreqType2);
-    Disp1->Canvas->CopyRect(Panel221->ClientRect,Plot1->Canvas,Panel221->ClientRect);
-    Disp2->Canvas->CopyRect(Panel222->ClientRect,Plot2->Canvas,Panel222->ClientRect);
+    if (Panel22->Visible) {
+        DrawPlot(Plot1,PlotType1,FreqType1);
+        Disp1->Canvas->CopyRect(Panel22->ClientRect,Plot1->Canvas,Panel22->ClientRect);
+    }
+    if (Panel23->Visible) {
+        DrawPlot(Plot2,PlotType2,FreqType2);
+        Disp2->Canvas->CopyRect(Panel23->ClientRect,Plot2->Canvas,Panel23->ClientRect);
+    }
+    if (Panel24->Visible) {
+        DrawPlot(Plot3,PlotType3,FreqType3);
+        Disp3->Canvas->CopyRect(Panel24->ClientRect,Plot3->Canvas,Panel24->ClientRect);
+    }
+    if (Panel25->Visible) {
+        DrawPlot(Plot4,PlotType4,FreqType4);
+        Disp4->Canvas->CopyRect(Panel25->ClientRect,Plot4->Canvas,Panel25->ClientRect);
+    }
 }
 // snr color ----------------------------------------------------------------
 TColor __fastcall TMainForm::SnrColor(int snr)
@@ -1667,7 +1861,7 @@ void __fastcall TMainForm::DrawSnr(TCanvas *c, int w, int h, int x0, int y0,
             TRect r1(x1,y1,x1+www,y2);
             if (j==0) {
                 c->Brush->Style=bsSolid;
-                c->Brush->Color=freq<NFREQ?SnrColor(snr[k]):color_sys[l];
+                c->Brush->Color=freq<NFREQ+1?SnrColor(snr[k]):color_sys[l];
                 if (!Vsat[index][i]) c->Brush->Color=clSilver;
                 c->Rectangle(r1);
             }
@@ -1694,10 +1888,11 @@ void __fastcall TMainForm::DrawSat(TCanvas *c, int w, int h, int x0, int y0,
     static const TColor color_sys[]={
         clGreen,(TColor)0xAAFF,clFuchsia,clBlue,clRed,clGray
     };
+    TColor color_text;
     UnicodeString s;
     TPoint p(w/2,h/2);
     double r=MIN(w*0.95,h*0.95)/2,azel[MAXSAT*2],dop[4];
-    int i,k,l,d,x[MAXSAT],y[MAXSAT],ns=0,f=!freq?0:freq-1;
+    int i,j,k,l,d,x[MAXSAT],y[MAXSAT],snr[NFREQ+1],ns=0;
     char id[16],sys[]="GREJCS",*q;
     
     trace(4,"DrawSat: w=%d h=%d index=%d freq=%d\n",w,h,index,freq);
@@ -1706,7 +1901,13 @@ void __fastcall TMainForm::DrawSat(TCanvas *c, int w, int h, int x0, int y0,
     
     for (i=0,k=Nsat[index]-1;i<Nsat[index]&&i<MAXSAT;i++,k--) {
         if (El[index][k]<=0.0) continue;
-        if (Vsat[index][k]) {
+        for (j=snr[0]=0;j<NFREQ;j++) {
+            snr[j+1]=Snr[index][k][j];
+            if ((freq&&freq==j+1)||((!freq||freq>NFREQ)&&snr[j+1]>snr[0])) {
+                snr[0]=snr[j+1];
+            }
+        }
+        if (Vsat[index][k]&&snr[freq]>0) {
             azel[ns*2]=Az[index][k]; azel[1+ns*2]=El[index][k];
             ns++;
         }
@@ -1714,19 +1915,25 @@ void __fastcall TMainForm::DrawSat(TCanvas *c, int w, int h, int x0, int y0,
         l=(q=strchr(sys,id[0]))?(int)(q-sys):5;
         x[i]=(int)(p.x+r*(90-El[index][k]*R2D)/90*sin(Az[index][k]))+x0;
         y[i]=(int)(p.y-r*(90-El[index][k]*R2D)/90*cos(Az[index][k]))+y0;
-        c->Pen->Color=clGray;
-        c->Brush->Style=bsSolid;
         d=SATSIZE/2;
         c->Brush->Color=!Vsat[index][k]?clSilver:
-                        (freq<NFREQ?SnrColor(Snr[index][k][f]):color_sys[l]);
+                        (freq<NFREQ+1?SnrColor(snr[freq]):color_sys[l]);
+        c->Brush->Style=bsSolid;
+        c->Pen->Color=clGray;
+        color_text=clWhite;
+        if (freq<NFREQ+1&&snr[freq]<=0) {
+            c->Brush->Style=bsClear;
+            c->Pen->Color=clSilver;
+            color_text=clSilver;
+        }
         c->Ellipse(x[i]-d,y[i]-d,x[i]+d+1,y[i]+d+1);
         c->Brush->Style=bsClear;
-        DrawText(c,x[i],y[i],s=id,clWhite,1);
+        DrawText(c,x[i],y[i],s=id,color_text,1);
     }
     c->Brush->Style=bsClear;
     dops(ns,azel,0.0,dop);
-    DrawText(c,x0+3,y0+h-15,s.sprintf(L"# Sat:%2d",Nsat[index]),clGray,0);
-    DrawText(c,x0+w-3,y0+h-15,s.sprintf(L"GDOP:%.1f",dop[0]),clGray,2);
+    DrawText(c,x0+3,y0+h-15,s.sprintf(L"#Sat:%2d/%2d",ns,Nsat[index]),clGray,0);
+    DrawText(c,x0+w-3,y0+h-15,s.sprintf(L"GDOP: %.1f",dop[0]),clGray,2);
 }
 // draw baseline plot -------------------------------------------------------
 void __fastcall TMainForm::DrawBL(TImage *plot, int w, int h)
@@ -1744,7 +1951,10 @@ void __fastcall TMainForm::DrawBL(TImage *plot, int w, int h)
     
     trace(4,"DrawBL: w=%d h=%d\n",w,h);
     
-    mode=plot->Name=="Plot1"?BLMode1:BLMode2;
+	if 		(plot->Name=="Plot1") mode=BLMode1;
+	else if (plot->Name=="Plot2") mode=BLMode2;
+	else if (plot->Name=="Plot3") mode=BLMode3;
+	else 						  mode=BLMode4;
     
     if (PMODE_DGPS<=PrcOpt.mode&&PrcOpt.mode<=PMODE_FIXED) {
         col=rtksvr.state&&SolStat[PSol]&&SolCurrentStat?color[SolStat[PSol]]:clWhite;
@@ -1815,7 +2025,7 @@ void __fastcall TMainForm::DrawBL(TImage *plot, int w, int h)
     c->Brush->Color=col;
     c->Ellipse(pp.x-d2/2+2,pp.y-d2/2+2,pp.x+d2/2-1,pp.y+d2/2-1);
     c->Brush->Color=clWhite;
-    digit=len<10.0?3:(len<100.0?2:(len<1000.0?1:0));
+    digit=len<1000.0?3:(len<10000.0?2:(len<100000.0?1:0));
     DrawText(c,p.x,p.y ,s.sprintf(L"%.*f m",digit,len),clGray,1);
     DrawText(c,5,  h-15,s.sprintf(L"Y: %.1f%c",yaw*R2D,CHARDEG),clGray,0);
     DrawText(c,w-3,h-15,s.sprintf(L"P: %.1f%c",pitch*R2D,CHARDEG),clGray,2);
@@ -1891,10 +2101,10 @@ void __fastcall TMainForm::DrawTrk(TImage *plot)
     if (n>0) {
         graph->ToPoint(x[k],y[k],p1);
         graph->DrawMark(p1,0,clWhite,18,0);
-        graph->DrawMark(p1,1,clBlack,16,0);
-        graph->DrawMark(p1,5,clBlack,20,0);
-        graph->DrawMark(p1,0,clBlack,12,0);
-        graph->DrawMark(p1,0,c[k],10,0);
+        graph->DrawMark(p1,1,rtksvr.state?clBlack:clGray,16,0);
+        graph->DrawMark(p1,5,rtksvr.state?clBlack:clGray,20,0);
+        graph->DrawMark(p1,0,rtksvr.state?clBlack:clGray,12,0);
+        graph->DrawMark(p1,0,rtksvr.state?c[k]:clWhite,10,0);
     }
     // scale
     graph->GetPos(p1,p2);
@@ -1913,7 +2123,7 @@ void __fastcall TMainForm::DrawTrk(TImage *plot)
     // ref position
     if (norm(ref,3)>1E-6) {
         p1.x+=2;
-        p1.y=p2.y+12;
+        p1.y=p2.y+11;
         label.sprintf("%.9f %.9f",pos[0]*R2D,pos[1]*R2D);
         graph->DrawText(p1,label,clGray,clWhite,1,1,0);
     }
@@ -2087,6 +2297,7 @@ void __fastcall TMainForm::LoadNav(nav_t *nav)
     AnsiString str,s;
     eph_t eph0={0};
     char buff[2049],id[32],*p;
+    long toe_time,toc_time,ttr_time;
     int i;
     
     trace(3,"LoadNav\n");
@@ -2103,9 +2314,9 @@ void __fastcall TMainForm::LoadNav(nav_t *nav)
                &nav->eph[i].iodc,
                &nav->eph[i].sva ,
                &nav->eph[i].svh ,
-               &nav->eph[i].toe.time,
-               &nav->eph[i].toc.time,
-               &nav->eph[i].ttr.time,
+               &toe_time,
+               &toc_time,
+               &ttr_time,
                &nav->eph[i].A   ,
                &nav->eph[i].e   ,
                &nav->eph[i].i0  ,
@@ -2129,6 +2340,9 @@ void __fastcall TMainForm::LoadNav(nav_t *nav)
                &nav->eph[i].tgd[0],
                &nav->eph[i].code,
                &nav->eph[i].flag);
+        nav->eph[i].toe.time=toe_time;
+        nav->eph[i].toc.time=toc_time;
+        nav->eph[i].ttr.time=ttr_time;
     }
     str=ini->ReadString("navi","ion","");
     for (i=0;i<8;i++) nav->ion_gps[i]=0.0;
@@ -2234,21 +2448,21 @@ void __fastcall TMainForm::LoadOpt(void)
     for (i=0;i<3;i++) {
         RcvOpt [i]=ini->ReadString("stream",s.sprintf("rcvopt%d",i+1),"");
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         Cmds[i][j]=ini->ReadString("serial",s.sprintf("cmd_%d_%d",i,j),"");
         CmdEna[i][j]=ini->ReadInteger("serial",s.sprintf("cmdena_%d_%d",i,j),0);
         for (p=Cmds[i][j].c_str();*p;p++) {
             if ((p=strstr(p,"@@"))) strncpy(p,"\r\n",2); else break;
         }
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         CmdsTcp[i][j]=ini->ReadString("tcpip",s.sprintf("cmd_%d_%d",i,j),"");
         CmdEnaTcp[i][j]=ini->ReadInteger("tcpip",s.sprintf("cmdena_%d_%d",i,j),0);
         for (p=CmdsTcp[i][j].c_str();*p;p++) {
             if ((p=strstr(p,"@@"))) strncpy(p,"\r\n",2); else break;
         }
     }
-    PrcOpt.mode     =ini->ReadInteger("prcopt", "mode",            0);
+    PrcOpt.mode     =ini->ReadInteger("prcopt", "mode",            2);
     PrcOpt.nf       =ini->ReadInteger("prcopt", "nf",              2);
     PrcOpt.elmin    =ini->ReadFloat  ("prcopt", "elmin",    15.0*D2R);
     PrcOpt.snrmask.ena[0]=ini->ReadInteger("prcopt","snrmask_ena1",0);
@@ -2257,21 +2471,24 @@ void __fastcall TMainForm::LoadOpt(void)
         PrcOpt.snrmask.mask[i][j]=
             ini->ReadFloat("prcopt",s.sprintf("snrmask_%d_%d",i+1,j+1),0.0);
     }
-    PrcOpt.dynamics =ini->ReadInteger("prcopt", "dynamics",        0);
+    PrcOpt.dynamics =ini->ReadInteger("prcopt", "dynamics",        1);
     PrcOpt.tidecorr =ini->ReadInteger("prcopt", "tidecorr",        0);
-    PrcOpt.modear   =ini->ReadInteger("prcopt", "modear",          1);
-    PrcOpt.glomodear=ini->ReadInteger("prcopt", "glomodear",       0);
+    PrcOpt.modear   =ini->ReadInteger("prcopt", "modear",          3);
+    PrcOpt.glomodear=ini->ReadInteger("prcopt", "glomodear",       3);
     PrcOpt.bdsmodear=ini->ReadInteger("prcopt", "bdsmodear",       0);
-    PrcOpt.maxout   =ini->ReadInteger("prcopt", "maxout",          5);
+    PrcOpt.maxout   =ini->ReadInteger("prcopt", "maxout",         20);
     PrcOpt.minlock  =ini->ReadInteger("prcopt", "minlock",         0);
-    PrcOpt.minfix   =ini->ReadInteger("prcopt", "minfix",         10);
+    PrcOpt.minfix   =ini->ReadInteger("prcopt", "minfix",         20);
     PrcOpt.ionoopt  =ini->ReadInteger("prcopt", "ionoopt",IONOOPT_BRDC);
     PrcOpt.tropopt  =ini->ReadInteger("prcopt", "tropopt",TROPOPT_SAAS);
     PrcOpt.sateph   =ini->ReadInteger("prcopt", "ephopt",  EPHOPT_BRDC);
     PrcOpt.armaxiter=ini->ReadInteger("prcopt", "ariter",          1);
+    PrcOpt.minfixsats=ini->ReadInteger("prcopt", "minfixsats",     4);
+    PrcOpt.minholdsats=ini->ReadInteger("prcopt", "minholdsats",   5);
+    PrcOpt.mindropsats=ini->ReadInteger("prcopt", "mindropsats",  10);
     PrcOpt.niter    =ini->ReadInteger("prcopt", "niter",           1);
-    PrcOpt.eratio[0]=ini->ReadFloat  ("prcopt", "eratio0",     100.0);
-    PrcOpt.eratio[1]=ini->ReadFloat  ("prcopt", "eratio1",     100.0);
+    PrcOpt.eratio[0]=ini->ReadFloat  ("prcopt", "eratio0",     300.0);
+    PrcOpt.eratio[1]=ini->ReadFloat  ("prcopt", "eratio1",     300.0);
     PrcOpt.err[1]   =ini->ReadFloat  ("prcopt", "err1",        0.003);
     PrcOpt.err[2]   =ini->ReadFloat  ("prcopt", "err2",        0.003);
     PrcOpt.err[3]   =ini->ReadFloat  ("prcopt", "err3",          0.0);
@@ -2279,31 +2496,40 @@ void __fastcall TMainForm::LoadOpt(void)
     PrcOpt.prn[0]   =ini->ReadFloat  ("prcopt", "prn0",         1E-4);
     PrcOpt.prn[1]   =ini->ReadFloat  ("prcopt", "prn1",         1E-3);
     PrcOpt.prn[2]   =ini->ReadFloat  ("prcopt", "prn2",         1E-4);
-    PrcOpt.prn[3]   =ini->ReadFloat  ("prcopt", "prn3",         10.0);
-    PrcOpt.prn[4]   =ini->ReadFloat  ("prcopt", "prn4",         10.0);
+    PrcOpt.prn[3]   =ini->ReadFloat  ("prcopt", "prn3",          3.0);
+    PrcOpt.prn[4]   =ini->ReadFloat  ("prcopt", "prn4",          1.0);
     PrcOpt.sclkstab =ini->ReadFloat  ("prcopt", "sclkstab",    5E-12);
     PrcOpt.thresar[0]=ini->ReadFloat ("prcopt", "thresar",       3.0);
-    PrcOpt.elmaskar =ini->ReadFloat  ("prcopt", "elmaskar",      0.0);
-    PrcOpt.elmaskhold=ini->ReadFloat ("prcopt", "elmaskhold",    0.0);
-    PrcOpt.thresslip=ini->ReadFloat  ("prcopt", "thresslip",    0.05);
-    PrcOpt.maxtdiff =ini->ReadFloat  ("prcopt", "maxtdiff",     30.0);
-    PrcOpt.maxgdop  =ini->ReadFloat  ("prcopt", "maxgdop",      30.0);
-    PrcOpt.maxinno  =ini->ReadFloat  ("prcopt", "maxinno",      30.0);
-    PrcOpt.syncsol  =ini->ReadInteger("prcopt", "syncsol",         0);
-    ExSats          =ini->ReadString ("prcopt", "exsats",         "");
-    PrcOpt.navsys   =ini->ReadInteger("prcopt", "navsys",    SYS_GPS);
+    PrcOpt.thresar[1]=ini->ReadFloat ("prcopt", "thresar1",      0.1);
+    PrcOpt.thresar[2]=ini->ReadFloat ("prcopt", "thresar2",      0.0);
+    PrcOpt.thresar[3]=ini->ReadFloat ("prcopt", "thresar3",      1E-7);
+    PrcOpt.thresar[4]=ini->ReadFloat ("prcopt", "thresar4",      1E-3);
+    PrcOpt.elmaskar =ini->ReadFloat  ("prcopt", "elmaskar",  15.0*D2R);
+    PrcOpt.elmaskhold=ini->ReadFloat ("prcopt", "elmaskhold",15.0*D2R);
+    PrcOpt.thresslip=ini->ReadFloat  ("prcopt", "thresslip",     0.05);
+    PrcOpt.maxtdiff =ini->ReadFloat  ("prcopt", "maxtdiff",      30.0);
+    PrcOpt.maxgdop  =ini->ReadFloat  ("prcopt", "maxgdop",       30.0);
+    PrcOpt.maxinno  =ini->ReadFloat  ("prcopt", "maxinno",     1000.0);
+    PrcOpt.varholdamb=ini->ReadFloat ("prcopt", "varholdamb",     0.1);
+    PrcOpt.gainholdamb=ini->ReadFloat("prcopt", "gainholdamb",   0.01);
+    PrcOpt.syncsol  =ini->ReadInteger("prcopt", "syncsol",          0);
+    PrcOpt.arfilter =ini->ReadInteger("prcopt", "arfilter",         1);
+    PrcOpt.rcvstds  =ini->ReadInteger("prcopt", "rcvstds",          0);
+    ExSats          =ini->ReadString ("prcopt", "exsats",          "");
+    PrcOpt.navsys   =ini->ReadInteger("prcopt", "navsys",SYS_GPS|SYS_GLO);
     PrcOpt.posopt[0]=ini->ReadInteger("prcopt", "posopt1",         0);
     PrcOpt.posopt[1]=ini->ReadInteger("prcopt", "posopt2",         0);
     PrcOpt.posopt[2]=ini->ReadInteger("prcopt", "posopt3",         0);
     PrcOpt.posopt[3]=ini->ReadInteger("prcopt", "posopt4",         0);
     PrcOpt.posopt[4]=ini->ReadInteger("prcopt", "posopt5",         0);
     PrcOpt.posopt[5]=ini->ReadInteger("prcopt", "posopt6",         0);
-    PrcOpt.maxaveep =ini->ReadInteger("prcopt", "maxaveep",     3600);
-    
+    PrcOpt.maxaveep =ini->ReadInteger("prcopt", "maxaveep",        1);
+    PrcOpt.initrst  =ini->ReadInteger("prcopt", "initrst",         1);
+
     BaselineC       =ini->ReadInteger("prcopt", "baselinec",       0);
     Baseline[0]     =ini->ReadFloat  ("prcopt", "baseline1",     0.0);
     Baseline[1]     =ini->ReadFloat  ("prcopt", "baseline2",     0.0);
-    
+
     SolOpt.posf     =ini->ReadInteger("solopt", "posf",            0);
     SolOpt.times    =ini->ReadInteger("solopt", "times",           0);
     SolOpt.timef    =ini->ReadInteger("solopt", "timef",           1);
@@ -2311,18 +2537,20 @@ void __fastcall TMainForm::LoadOpt(void)
     SolOpt.degf     =ini->ReadInteger("solopt", "degf",            0);
     s=ini->ReadString("solopt","sep"," ");
     strcpy(SolOpt.sep,s.c_str());
-    SolOpt.outhead  =ini->ReadInteger("solopt", "outhead",         0);
-    SolOpt.outopt   =ini->ReadInteger("solopt", "outopt",          0);
+    SolOpt.outhead  =ini->ReadInteger("solopt", "outhead",         1);
+    SolOpt.outopt   =ini->ReadInteger("solopt", "outopt",          1);
+    PrcOpt.outsingle=ini->ReadInteger("prcopt", "outsingle",       0);
+    SolOpt.maxsolstd=ini->ReadFloat  ("solopt", "maxsolstd",     0.0);
     SolOpt.datum    =ini->ReadInteger("solopt", "datum",           0);
     SolOpt.height   =ini->ReadInteger("solopt", "height",          0);
     SolOpt.geoid    =ini->ReadInteger("solopt", "geoid",           0);
     SolOpt.nmeaintv[0]=ini->ReadFloat("solopt", "nmeaintv1",     0.0);
     SolOpt.nmeaintv[1]=ini->ReadFloat("solopt", "nmeaintv2",     0.0);
-    DebugStatusF    =ini->ReadInteger("setting","debugstatus",     0);
+    DebugStatusF    =ini->ReadInteger("setting","debugstatus",     2);
     DebugTraceF     =ini->ReadInteger("setting","debugtrace",      0);
-    
+
     RovPosTypeF     =ini->ReadInteger("setting","rovpostype",      0);
-    RefPosTypeF     =ini->ReadInteger("setting","refpostype",      0);
+    RefPosTypeF     =ini->ReadInteger("setting","refpostype",      5);
     RovAntPcvF      =ini->ReadInteger("setting","rovantpcv",       0);
     RefAntPcvF      =ini->ReadInteger("setting","refantpcv",       0);
     RovAntF         =ini->ReadString ("setting","rovant",         "");
@@ -2336,7 +2564,6 @@ void __fastcall TMainForm::LoadOpt(void)
     TLEFileF        =ini->ReadString ("setting","tlefile",        "");
     TLESatFileF     =ini->ReadString ("setting","tlesatfile",     "");
     LocalDirectory  =ini->ReadString ("setting","localdirectory","C:\\Temp");
-    InitRestart     =ini->ReadInteger("setting","initrestart",     0);
     
     SvrCycle        =ini->ReadInteger("setting","svrcycle",       10);
     TimeoutTime     =ini->ReadInteger("setting","timeouttime", 10000);
@@ -2354,6 +2581,7 @@ void __fastcall TMainForm::LoadOpt(void)
     InTimeTag       =ini->ReadInteger("setting","intimetag",       0);
     InTimeSpeed     =ini->ReadString ("setting","intimespeed",  "x1");
     InTimeStart     =ini->ReadString ("setting","intimestart",   "0");
+    InTime64Bit     =ini->ReadInteger("setting","intime64bit",      sizeof (size_t) == 4 ? 0 : 1);
     OutTimeTag      =ini->ReadInteger("setting","outtimetag",      0);
     OutAppend       =ini->ReadInteger("setting","outappend",       0);
     OutSwapInterval =ini->ReadString ("setting","outswapinterval","");
@@ -2362,22 +2590,35 @@ void __fastcall TMainForm::LoadOpt(void)
     LogSwapInterval =ini->ReadString ("setting","logswapinterval","");
     NmeaPos[0]      =ini->ReadFloat  ("setting","nmeapos1",      0.0);
     NmeaPos[1]      =ini->ReadFloat  ("setting","nmeapos2",      0.0);
+    NmeaPos[2]      =ini->ReadFloat  ("setting","nmeapos3",      0.0);
+    ResetCmd        =ini->ReadString ("setting","resetcmd",       "");
+    MaxBL           =ini->ReadFloat  ("setting","maxbl",        10.0);
     FileSwapMargin  =ini->ReadInteger("setting","fswapmargin",    30);
     
     TimeSys         =ini->ReadInteger("setting","timesys",         0);
-    SolType         =ini->ReadInteger("setting","soltype",         0);
+    SolType         =ini->ReadInteger("setting","soltype",         3);
     PlotType1       =ini->ReadInteger("setting","plottype",        0);
-    PlotType2       =ini->ReadInteger("setting","plottype2",       0);
-    PanelMode       =ini->ReadInteger("setting","panelmode",       0);
+    PlotType2       =ini->ReadInteger("setting","plottype2",       6);
+    PlotType3       =ini->ReadInteger("setting","plottype3",       0);
+    PlotType4       =ini->ReadInteger("setting","plottype4",       0);
+    PanelMode       =ini->ReadInteger("setting","panelmode",       1);
     ProxyAddr       =ini->ReadString ("setting","proxyaddr",      "");
     MoniPort        =ini->ReadInteger("setting","moniport",DEFAULTPORT);
     PanelStack      =ini->ReadInteger("setting","panelstack",      0);
     TrkType1        =ini->ReadInteger("setting","trktype1",        0);
     TrkType2        =ini->ReadInteger("setting","trktype2",        0);
+    TrkType3        =ini->ReadInteger("setting","trktype3",        0);
+    TrkType4        =ini->ReadInteger("setting","trktype4",        0);
     TrkScale1       =ini->ReadInteger("setting","trkscale1",       5);
     TrkScale2       =ini->ReadInteger("setting","trkscale2",       5);
+    TrkScale3       =ini->ReadInteger("setting","trkscale3",       5);
+    TrkScale4       =ini->ReadInteger("setting","trkscale4",       5);
     BLMode1         =ini->ReadInteger("setting","blmode1",         0);
     BLMode2         =ini->ReadInteger("setting","blmode2",         0);
+    BLMode3         =ini->ReadInteger("setting","blmode3",         0);
+    BLMode4         =ini->ReadInteger("setting","blmode4",         0);
+    MarkerName      =ini->ReadString ("setting","markername",     "");
+    MarkerComment   =ini->ReadString ("setting","markercomment",  "");
     
     for (i=0;i<3;i++) {
         RovAntDel[i]=ini->ReadFloat("setting",s.sprintf("rovantdel_%d",i),0.0);
@@ -2414,17 +2655,30 @@ void __fastcall TMainForm::LoadOpt(void)
     UpdatePanel();
     
     if (PanelStack==0) {
-        Panel21 ->Width=ini->ReadInteger("window","splitpos" ,180);
-        Panel221->Width=ini->ReadInteger("window","splitpos1",180);
-        Panel222->Width=ini->ReadInteger("window","splitpos2",180);
+        Panel21->Width=ini->ReadInteger("window","splitpos" ,185);
+        Panel22->Width=ini->ReadInteger("window","splitpos1",247);
+        Panel23->Width=ini->ReadInteger("window","splitpos2",262);
+        Panel24->Width=ini->ReadInteger("window","splitpos3",185);
+        Panel25->Width=ini->ReadInteger("window","splitpos4",185);
+        Panel21->Height=185;
+        Panel22->Height=185;
+        Panel23->Height=185;
+        Panel24->Height=185;
+        Panel25->Height=185;
     }
     else {
-        Panel21 ->Height=ini->ReadInteger("window","splitpos" ,180);
-        Panel221->Height=ini->ReadInteger("window","splitpos1",180);
-        Panel222->Height=ini->ReadInteger("window","splitpos2",180);
+        Panel21->Height=ini->ReadInteger("window","splitpos" ,185);
+        Panel22->Height=ini->ReadInteger("window","splitpos1",247);
+        Panel23->Height=ini->ReadInteger("window","splitpos2",262);
+        Panel24->Height=ini->ReadInteger("window","splitpos3",185);
+        Panel25->Height=ini->ReadInteger("window","splitpos4",185);
+        Panel21->Width=185;
+        Panel22->Width=185;
+        Panel23->Width=185;
+        Panel24->Width=185;
     }
-    Width         =ini->ReadInteger("window","width",   388);
-    Height        =ini->ReadInteger("window","height",  284);
+    Width         =ini->ReadInteger("window","width",   724);
+    Height        =ini->ReadInteger("window","height",  570);
     delete ini;
 }
 // save option to ini file --------------------------------------------------
@@ -2449,14 +2703,14 @@ void __fastcall TMainForm::SaveOpt(void)
     for (i=0;i<3;i++) {
         ini->WriteString("stream",s.sprintf("rcvopt%d",i+1),RcvOpt[i]);
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         for (p=Cmds[i][j].c_str();*p;p++) {
             if ((p=strstr(p,"\r\n"))) strncpy(p,"@@",2); else break;
         }
         ini->WriteString ("serial",s.sprintf("cmd_%d_%d"   ,i,j),Cmds  [i][j]);
         ini->WriteInteger("serial",s.sprintf("cmdena_%d_%d",i,j),CmdEna[i][j]);
     }
-    for (i=0;i<3;i++) for (j=0;j<2;j++) {
+    for (i=0;i<3;i++) for (j=0;j<3;j++) {
         for (p=CmdsTcp[i][j].c_str();*p;p++) {
             if ((p=strstr(p,"\r\n"))) strncpy(p,"@@",2); else break;
         }
@@ -2484,6 +2738,9 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("prcopt", "tropopt",    PrcOpt.tropopt     );
     ini->WriteInteger("prcopt", "ephopt",     PrcOpt.sateph      );
     ini->WriteInteger("prcopt", "ariter",     PrcOpt.armaxiter   );
+    ini->WriteInteger("prcopt", "minfixsats", PrcOpt.minfixsats  );
+    ini->WriteInteger("prcopt", "minholdsats",PrcOpt.minholdsats );
+    ini->WriteInteger("prcopt", "mindropsats",PrcOpt.mindropsats );
     ini->WriteInteger("prcopt", "niter",      PrcOpt.niter       );
     ini->WriteFloat  ("prcopt", "eratio0",    PrcOpt.eratio[0]   );
     ini->WriteFloat  ("prcopt", "eratio1",    PrcOpt.eratio[1]   );
@@ -2498,13 +2755,21 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteFloat  ("prcopt", "prn4",       PrcOpt.prn[4]      );
     ini->WriteFloat  ("prcopt", "sclkstab",   PrcOpt.sclkstab    );
     ini->WriteFloat  ("prcopt", "thresar",    PrcOpt.thresar[0]  );
+    ini->WriteFloat  ("prcopt", "thresar1",   PrcOpt.thresar[1]  );
+    ini->WriteFloat  ("prcopt", "thresar2",   PrcOpt.thresar[2]  );
+    ini->WriteFloat  ("prcopt", "thresar3",   PrcOpt.thresar[3]  );
+    ini->WriteFloat  ("prcopt", "thresar4",   PrcOpt.thresar[4]  );
     ini->WriteFloat  ("prcopt", "elmaskar",   PrcOpt.elmaskar    );
     ini->WriteFloat  ("prcopt", "elmaskhold", PrcOpt.elmaskhold  );
     ini->WriteFloat  ("prcopt", "thresslip",  PrcOpt.thresslip   );
     ini->WriteFloat  ("prcopt", "maxtdiff",   PrcOpt.maxtdiff    );
     ini->WriteFloat  ("prcopt", "maxgdop",    PrcOpt.maxgdop     );
     ini->WriteFloat  ("prcopt", "maxinno",    PrcOpt.maxinno     );
+    ini->WriteFloat  ("prcopt", "varholdamb", PrcOpt.varholdamb  );
+    ini->WriteFloat  ("prcopt", "gainholdamb",PrcOpt.gainholdamb );
     ini->WriteInteger("prcopt", "syncsol",    PrcOpt.syncsol     );
+    ini->WriteInteger("prcopt", "arfilter",   PrcOpt.arfilter    );
+    ini->WriteInteger("prcopt", "rcvstds",    PrcOpt.rcvstds     );
     ini->WriteString ("prcopt", "exsats",     ExSats             );
     ini->WriteInteger("prcopt", "navsys",     PrcOpt.navsys      );
     ini->WriteInteger("prcopt", "posopt1",    PrcOpt.posopt[0]   );
@@ -2514,6 +2779,7 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("prcopt", "posopt5",    PrcOpt.posopt[4]   );
     ini->WriteInteger("prcopt", "posopt6",    PrcOpt.posopt[5]   );
     ini->WriteInteger("prcopt", "maxaveep",   PrcOpt.maxaveep    );
+    ini->WriteInteger("prcopt", "initrst",    PrcOpt.initrst     );
     
     ini->WriteFloat  ("prcopt", "baselinec",  BaselineC          );
     ini->WriteFloat  ("prcopt", "baseline1",  Baseline[0]        );
@@ -2527,6 +2793,8 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteString ("solopt", "sep",        SolOpt.sep         );
     ini->WriteInteger("solopt", "outhead",    SolOpt.outhead     );
     ini->WriteInteger("solopt", "outopt",     SolOpt.outopt      );
+    ini->WriteInteger("prcopt", "outsingle",  PrcOpt.outsingle   );
+    ini->WriteFloat  ("solopt", "maxsolstd",  SolOpt.maxsolstd   );
     ini->WriteInteger("solopt", "datum",      SolOpt.datum       );
     ini->WriteInteger("solopt", "height",     SolOpt.height      );
     ini->WriteInteger("solopt", "geoid",      SolOpt.geoid       );
@@ -2550,7 +2818,6 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteString ("setting","tlefile",    TLEFileF           );
     ini->WriteString ("setting","tlesatfile", TLESatFileF        );
     ini->WriteString ("setting","localdirectory",LocalDirectory  );
-    ini->WriteInteger("setting","initrestart",InitRestart        );
     
     ini->WriteInteger("setting","svrcycle",   SvrCycle           );
     ini->WriteInteger("setting","timeouttime",TimeoutTime        );
@@ -2568,6 +2835,7 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("setting","intimetag",  InTimeTag          );
     ini->WriteString ("setting","intimespeed",InTimeSpeed        );
     ini->WriteString ("setting","intimestart",InTimeStart        );
+    ini->WriteInteger("setting","intime64bit",InTime64Bit        );
     ini->WriteInteger("setting","outtimetag", OutTimeTag         );
     ini->WriteInteger("setting","outappend",  OutAppend          );
     ini->WriteString ("setting","outswapinterval",OutSwapInterval);
@@ -2576,22 +2844,35 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteString ("setting","logswapinterval",LogSwapInterval);
     ini->WriteFloat  ("setting","nmeapos1",   NmeaPos[0]         );
     ini->WriteFloat  ("setting","nmeapos2",   NmeaPos[1]         );
+    ini->WriteFloat  ("setting","nmeapos3",   NmeaPos[2]         );
+    ini->WriteString ("setting","resetcmd",   ResetCmd           );
+    ini->WriteFloat  ("setting","maxbl",      MaxBL              );
     ini->WriteInteger("setting","fswapmargin",FileSwapMargin     );
     
     ini->WriteInteger("setting","timesys",    TimeSys            );
     ini->WriteInteger("setting","soltype",    SolType            );
     ini->WriteInteger("setting","plottype",   PlotType1          );
     ini->WriteInteger("setting","plottype2",  PlotType2          );
+    ini->WriteInteger("setting","plottype3",  PlotType3          );
+    ini->WriteInteger("setting","plottype4",  PlotType4          );
     ini->WriteInteger("setting","panelmode",  PanelMode          );
     ini->WriteString ("setting","proxyaddr",  ProxyAddr          );
     ini->WriteInteger("setting","moniport",   MoniPort           );
     ini->WriteInteger("setting","panelstack", PanelStack         );
     ini->WriteInteger("setting","trktype1",   TrkType1           );
     ini->WriteInteger("setting","trktype2",   TrkType2           );
+    ini->WriteInteger("setting","trktype3",   TrkType3           );
+    ini->WriteInteger("setting","trktype4",   TrkType4           );
     ini->WriteInteger("setting","trkscale1",  TrkScale1          );
     ini->WriteInteger("setting","trkscale2",  TrkScale2          );
+    ini->WriteInteger("setting","trkscale3",  TrkScale3          );
+    ini->WriteInteger("setting","trkscale4",  TrkScale4          );
     ini->WriteInteger("setting","blmode1",    BLMode1            );
     ini->WriteInteger("setting","blmode2",    BLMode2            );
+    ini->WriteInteger("setting","blmode3",    BLMode3            );
+    ini->WriteInteger("setting","blmode4",    BLMode4            );
+    ini->WriteString ("setting","markername", MarkerName         );
+    ini->WriteString ("setting","markercomment",MarkerComment    );
     
     for (i=0;i<3;i++) {
         ini->WriteFloat("setting",s.sprintf("rovantdel_%d",i),RovAntDel[i]);
@@ -2626,26 +2907,37 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("window","width",    Width);
     ini->WriteInteger("window","height",   Height);
     if (PanelStack==0) {
-        ini->WriteInteger("window","splitpos", Panel21 ->Width);
-        ini->WriteInteger("window","splitpos1",Panel221->Width);
-        ini->WriteInteger("window","splitpos2",Panel222->Width);
+        ini->WriteInteger("window","splitpos", Panel21->Width);
+        ini->WriteInteger("window","splitpos1",Panel22->Width);
+        ini->WriteInteger("window","splitpos2",Panel23->Width);
+        ini->WriteInteger("window","splitpos3",Panel24->Width);
+        ini->WriteInteger("window","splitpos4",Panel25->Width);
     }
     else {
-        ini->WriteInteger("window","splitpos", Panel21 ->Height);
-        ini->WriteInteger("window","splitpos1",Panel221->Height);
-        ini->WriteInteger("window","splitpos2",Panel222->Height);
+        ini->WriteInteger("window","splitpos", Panel21->Height);
+        ini->WriteInteger("window","splitpos1",Panel22->Height);
+        ini->WriteInteger("window","splitpos2",Panel23->Height);
+        ini->WriteInteger("window","splitpos3",Panel24->Height);
+        ini->WriteInteger("window","splitpos4",Panel25->Height);
     }
     delete ini;
 }
-//---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 void __fastcall TMainForm::BtnMarkClick(TObject *Sender)
 {
 	MarkDialog->PosMode=rtksvr.rtk.opt.mode;
+	MarkDialog->Marker=MarkerName;
+	MarkDialog->Comment=MarkerComment;
 	if (MarkDialog->ShowModal()!=mrOk) return;
 	rtksvr.rtk.opt.mode=MarkDialog->PosMode;
+	MarkerName=MarkDialog->Marker;
+	MarkerComment=MarkDialog->Comment;
+    UpdatePos();
 }
 //---------------------------------------------------------------------------
 
+
+
+//---------------------------------------------------------------------------
 

@@ -83,14 +83,18 @@ void __fastcall TPlotOptDialog::FormShow(TObject *Sender)
     NavSys4->Checked=Plot->NavSys&SYS_QZS;
     NavSys5->Checked=Plot->NavSys&SYS_SBS;
     NavSys6->Checked=Plot->NavSys&SYS_CMP;
+    NavSys7->Checked=Plot->NavSys&SYS_IRN;
     AnimCycle->Text=s.sprintf("%d",Plot->AnimCycle);
     RefCycle ->Text=s.sprintf("%d",Plot->RefCycle );
     HideLowSat->ItemIndex=Plot->HideLowSat;
     ElMaskP->ItemIndex=Plot->ElMaskP;
     ExSats->Text=Plot->ExSats;
     BuffSize->Text=s.sprintf("%d",Plot->RtBuffSize);
+    ChkTimeSync->Checked=Plot->TimeSyncOut;
+    EditTimeSync->Text=s.sprintf("%d",Plot->TimeSyncPort);
     QcCmd  ->Text=Plot->QcCmd;
     RnxOpts->Text=Plot->RnxOpts;
+    ApiKey ->Text=Plot->ApiKey;
     TLEFile->Text=Plot->TLEFile;
     TLESatFile->Text=Plot->TLESatFile;
     
@@ -149,15 +153,19 @@ void __fastcall TPlotOptDialog::BtnOKClick(TObject *Sender)
                  (NavSys3->Checked?SYS_GAL:0)|
                  (NavSys4->Checked?SYS_QZS:0)|
                  (NavSys5->Checked?SYS_SBS:0)|
-                 (NavSys6->Checked?SYS_CMP:0);
+                 (NavSys6->Checked?SYS_CMP:0)|
+                 (NavSys7->Checked?SYS_IRN:0);
     Plot->AnimCycle=AnimCycle->Text.ToInt();
     Plot->RefCycle =RefCycle ->Text.ToInt();
     Plot->HideLowSat=HideLowSat->ItemIndex;
     Plot->ElMaskP=ElMaskP->ItemIndex;
     Plot->RtBuffSize=(int)str2dbl(BuffSize->Text);
+    Plot->TimeSyncOut=ChkTimeSync->Checked;
+    Plot->TimeSyncPort=EditTimeSync->Text.ToInt();
     Plot->ExSats=ExSats->Text;
     Plot->QcCmd =QcCmd->Text;
     Plot->RnxOpts=RnxOpts->Text;
+    Plot->ApiKey=ApiKey->Text;
     Plot->TLEFile=TLEFile->Text;
     Plot->TLESatFile=TLESatFile->Text;
 }
@@ -266,6 +274,7 @@ void __fastcall TPlotOptDialog::UpdateEnable(void)
     RefPos3    ->Enabled=Origin->ItemIndex==5||RcvPos->ItemIndex==1;
     LabelRefPos->Enabled=Origin->ItemIndex==5||Origin->ItemIndex==6||RcvPos->ItemIndex==1;
     BtnRefPos  ->Enabled=Origin->ItemIndex==5||Origin->ItemIndex==6||RcvPos->ItemIndex==1;
+    EditTimeSync->Enabled=ChkTimeSync->Checked;
 }
 //---------------------------------------------------------------------------
 void __fastcall TPlotOptDialog::RcvPosChange(TObject *Sender)
@@ -295,6 +304,11 @@ void __fastcall TPlotOptDialog::BtnTLESatViewClick(TObject *Sender)
     viewer->Caption=file;
     viewer->Show();
     viewer->Read(file);
+}
+//---------------------------------------------------------------------------
+void __fastcall TPlotOptDialog::ChkTimeSyncClick(TObject *Sender)
+{
+    UpdateEnable();
 }
 //---------------------------------------------------------------------------
 

@@ -46,7 +46,7 @@ static char proxyaddr[MAXSTR]="";       /* proxy address */
 #define FLGOPT  "0:off,1:std+2:age/ratio/ns"
 #define ISTOPT  "0:off,1:serial,2:file,3:tcpsvr,4:tcpcli,7:ntripcli,8:ftp,9:http"
 #define OSTOPT  "0:off,1:serial,2:file,3:tcpsvr,4:tcpcli,6:ntripsvr"
-#define FMTOPT  "0:rtcm2,1:rtcm3,2:oem4,3:oem3,4:ubx,5:ss2,6:hemis,7:skytraq,8:gw10,9:javad,10:nvs,11:binex,12:rt17,15:sp3"
+#define FMTOPT  "0:rtcm2,1:rtcm3,2:oem4,3:oem3,4:ubx,5:swift,6:hemis,7:skytraq,8:gw10,9:javad,10:nvs,11:binex,12:rt17,13:sbf,14:cmr,15:tersus,17:sp3"
 #define NMEOPT  "0:off,1:latlon,2:single"
 #define SOLOPT  "0:llh,1:xyz,2:enu,3:nmea"
 #define MSGOPT  "0:all,1:rover,2:base,3:corr"
@@ -93,8 +93,9 @@ __fastcall TOptDialog::TOptDialog(TComponent* Owner)
 	: TForm(Owner)
 {
 	AnsiString label,s;
-	int freq[]={1,2,5,6,7,8},nglo=MAXPRNGLO,ngal=MAXPRNGAL,nqzs=MAXPRNQZS;
-	int ncmp=MAXPRNCMP;
+	const char *freqs[]={"L1","L2","E5b","L5","E6","E5ab"};
+	int nglo=MAXPRNGLO,ngal=MAXPRNGAL,nqzs=MAXPRNQZS;
+	int ncmp=MAXPRNCMP,nirn=MAXPRNIRN;
 	PrcOpt=prcopt_default;
 	SolOpt=solopt_default;
 	UpdateEnable();
@@ -102,13 +103,14 @@ __fastcall TOptDialog::TOptDialog(TComponent* Owner)
 	
 	Freq->Items->Clear();
 	for (int i=0;i<NFREQ;i++) {
-		label=label+(i>0?"+":"")+s.sprintf("L%d",freq[i]);
+		label=label+(i>0?"+":"")+s.sprintf("%s",freqs[i]);
 		Freq->Items->Add(label);
 	}
 	if (nglo<=0) NavSys2->Enabled=false;
 	if (ngal<=0) NavSys3->Enabled=false;
 	if (nqzs<=0) NavSys4->Enabled=false;
 	if (ncmp<=0) NavSys6->Enabled=false;
+	if (nirn<=0) NavSys7->Enabled=false;
 	UpdateEnable();
 }
 //---------------------------------------------------------------------------
@@ -415,6 +417,8 @@ void __fastcall TOptDialog::GetOpt(void)
 	GloAmbRes	 ->ItemIndex=PrcOpt.glomodear;
 	BdsAmbRes	 ->ItemIndex=PrcOpt.bdsmodear;
 	ValidThresAR ->Text     =s.sprintf("%.1f",PrcOpt.thresar[0]);
+	MaxPosVarAR  ->Text     =s.sprintf("%.3f",PrcOpt.thresar[1]);
+	GloHwBias    ->Text     =s.sprintf("%.3f",PrcOpt.thresar[2]);
 	OutCntResetAmb->Text    =s.sprintf("%d",  PrcOpt.maxout);
 	LockCntFixAmb->Text     =s.sprintf("%d",  PrcOpt.minlock);
 	FixCntHoldAmb->Text     =s.sprintf("%d",  PrcOpt.minfix);
@@ -423,10 +427,17 @@ void __fastcall TOptDialog::GetOpt(void)
 	MaxAgeDiff	 ->Text     =s.sprintf("%.1f",PrcOpt.maxtdiff);
 	RejectGdop   ->Text     =s.sprintf("%.1f",PrcOpt.maxgdop);
 	RejectThres  ->Text     =s.sprintf("%.1f",PrcOpt.maxinno);
+	VarHoldAmb   ->Text     =s.sprintf("%.4f",PrcOpt.varholdamb);
+	GainHoldAmb  ->Text     =s.sprintf("%.4f",PrcOpt.gainholdamb);
 	SlipThres	 ->Text     =s.sprintf("%.3f",PrcOpt.thresslip);
 	ARIter		 ->Text     =s.sprintf("%d",  PrcOpt.armaxiter);
 	NumIter		 ->Text     =s.sprintf("%d",  PrcOpt.niter);
+	MinFixSats	 ->Text     =s.sprintf("%d",  PrcOpt.minfixsats);
+	MinHoldSats	 ->Text     =s.sprintf("%d",  PrcOpt.minholdsats);
+	MinDropSats	 ->Text     =s.sprintf("%d",  PrcOpt.mindropsats);
 	SyncSol		 ->ItemIndex=PrcOpt.syncsol;
+	ARFilter	 ->ItemIndex=PrcOpt.arfilter;
+	RcvStds	     ->ItemIndex=PrcOpt.rcvstds;
 	ExSatsE		 ->Text     =ExSats;
 	NavSys1		 ->Checked  =PrcOpt.navsys&SYS_GPS;
 	NavSys2		 ->Checked  =PrcOpt.navsys&SYS_GLO;
@@ -434,6 +445,7 @@ void __fastcall TOptDialog::GetOpt(void)
 	NavSys4		 ->Checked  =PrcOpt.navsys&SYS_QZS;
 	NavSys5		 ->Checked  =PrcOpt.navsys&SYS_SBS;
 	NavSys6		 ->Checked  =PrcOpt.navsys&SYS_CMP;
+	NavSys7		 ->Checked  =PrcOpt.navsys&SYS_IRN;
 	PosOpt1		 ->Checked  =PrcOpt.posopt[0];
 	PosOpt2		 ->Checked  =PrcOpt.posopt[1];
 	PosOpt3		 ->Checked  =PrcOpt.posopt[2];
@@ -447,6 +459,8 @@ void __fastcall TOptDialog::GetOpt(void)
 	FieldSep	 ->Text     =SolOpt.sep;
 	OutputHead	 ->ItemIndex=SolOpt.outhead;
 	OutputOpt	 ->ItemIndex=SolOpt.outopt;
+	OutputSingle ->ItemIndex=PrcOpt.outsingle;
+	MaxSolStd	 ->Text		=s.sprintf("%.2g",SolOpt.maxsolstd);
 	OutputDatum  ->ItemIndex=SolOpt.datum;
 	OutputHeight ->ItemIndex=SolOpt.height;
 	OutputGeoid  ->ItemIndex=SolOpt.geoid;
@@ -472,6 +486,7 @@ void __fastcall TOptDialog::GetOpt(void)
 	PrNoise5	 ->Text     =s.sprintf("%.2E",PrcOpt.prn[4]);
 	SatClkStab	 ->Text     =s.sprintf("%.2E",PrcOpt.sclkstab);
 	MaxAveEp	 ->Text		=s.sprintf("%d",PrcOpt.maxaveep);
+	ChkInitRestart->Checked =PrcOpt.initrst;
 	
 	RovPosTypeP	 ->ItemIndex=RovPosTypeF;
 	RefPosTypeP	 ->ItemIndex=RefPosTypeF;
@@ -487,7 +502,6 @@ void __fastcall TOptDialog::GetOpt(void)
 	RefAntU		 ->Text     =s.sprintf("%.4f",RefAntDel[2]);
 	SetPos(RovPosTypeP->ItemIndex,editu,RovPos);
 	SetPos(RefPosTypeP->ItemIndex,editr,RefPos);
-	ChkInitRestart->Checked =InitRestart;
 	
 	SatPcvFile	 ->Text     =SatPcvFileF;
 	AntPcvFile	 ->Text     =AntPcvFileF;
@@ -538,6 +552,8 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.glomodear =GloAmbRes   ->ItemIndex;
 	PrcOpt.bdsmodear =BdsAmbRes   ->ItemIndex;
 	PrcOpt.thresar[0]=str2dbl(ValidThresAR->Text);
+	PrcOpt.thresar[1]=str2dbl(MaxPosVarAR->Text);
+    PrcOpt.thresar[2]=str2dbl(GloHwBias->Text);
 	PrcOpt.maxout    =OutCntResetAmb->Text.ToInt();
 	PrcOpt.minlock   =LockCntFixAmb->Text.ToInt();
 	PrcOpt.minfix    =FixCntHoldAmb->Text.ToInt();
@@ -546,10 +562,17 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.maxtdiff  =str2dbl(MaxAgeDiff ->Text);
 	PrcOpt.maxgdop   =str2dbl(RejectGdop ->Text);
 	PrcOpt.maxinno   =str2dbl(RejectThres->Text);
+	PrcOpt.varholdamb=str2dbl(VarHoldAmb->Text);
+	PrcOpt.gainholdamb=str2dbl(GainHoldAmb->Text);
 	PrcOpt.thresslip =str2dbl(SlipThres  ->Text);
 	PrcOpt.armaxiter =ARIter      ->Text.ToInt();
+	PrcOpt.minfixsats =MinFixSats ->Text.ToInt();
+	PrcOpt.minholdsats =MinHoldSats->Text.ToInt();
+	PrcOpt.mindropsats =MinDropSats->Text.ToInt();
 	PrcOpt.niter     =NumIter     ->Text.ToInt();
 	PrcOpt.syncsol   =SyncSol     ->ItemIndex;
+	PrcOpt.arfilter  =ARFilter    ->ItemIndex;
+	PrcOpt.rcvstds   =RcvStds     ->ItemIndex;
 	ExSats			 =ExSatsE	  ->Text;
 	PrcOpt.navsys    =0;
 	if (NavSys1->Checked) PrcOpt.navsys|=SYS_GPS;
@@ -558,6 +581,7 @@ void __fastcall TOptDialog::SetOpt(void)
 	if (NavSys4->Checked) PrcOpt.navsys|=SYS_QZS;
 	if (NavSys5->Checked) PrcOpt.navsys|=SYS_SBS;
 	if (NavSys6->Checked) PrcOpt.navsys|=SYS_CMP;
+	if (NavSys7->Checked) PrcOpt.navsys|=SYS_IRN;
 	PrcOpt.posopt[0] =PosOpt1   ->Checked;
 	PrcOpt.posopt[1] =PosOpt2   ->Checked;
 	PrcOpt.posopt[2] =PosOpt3   ->Checked;
@@ -573,6 +597,8 @@ void __fastcall TOptDialog::SetOpt(void)
 	strcpy(SolOpt.sep,FieldSep_Text.c_str());
 	SolOpt.outhead   =OutputHead  ->ItemIndex;
 	SolOpt.outopt    =OutputOpt   ->ItemIndex;
+	PrcOpt.outsingle =OutputSingle->ItemIndex;
+	SolOpt.maxsolstd =str2dbl(MaxSolStd->Text);
 	SolOpt.datum     =OutputDatum ->ItemIndex;
 	SolOpt.height    =OutputHeight->ItemIndex;
 	SolOpt.geoid     =OutputGeoid ->ItemIndex;
@@ -598,6 +624,7 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.prn[4]    =str2dbl(PrNoise5  ->Text);
 	PrcOpt.sclkstab  =str2dbl(SatClkStab->Text);
 	PrcOpt.maxaveep  =MaxAveEp->Text.ToInt();
+	PrcOpt.initrst   =ChkInitRestart->Checked;
 	
 	RovPosTypeF      =RovPosTypeP ->ItemIndex;
 	RefPosTypeF      =RefPosTypeP ->ItemIndex;
@@ -613,7 +640,6 @@ void __fastcall TOptDialog::SetOpt(void)
 	RefAntDel[2]     =str2dbl(RefAntU   ->Text);
 	GetPos(RovPosTypeP->ItemIndex,editu,RovPos);
 	GetPos(RefPosTypeP->ItemIndex,editr,RefPos);
-	InitRestart      =ChkInitRestart->Checked;
 	
 	SatPcvFileF      =SatPcvFile  ->Text;
 	AntPcvFileF      =AntPcvFile  ->Text;
@@ -646,7 +672,7 @@ void __fastcall TOptDialog::SetOpt(void)
 void __fastcall TOptDialog::LoadOpt(AnsiString file)
 {
     int itype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP};
-    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
+    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_NTRIPC_C,STR_FILE};
 	TEdit *editu[]={RovPos1,RovPos2,RovPos3};
 	TEdit *editr[]={RefPos1,RefPos2,RefPos3};
 	AnsiString s;
@@ -692,7 +718,6 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	
 	PosMode		 ->ItemIndex	=prcopt.mode;
 	Freq		 ->ItemIndex	=prcopt.nf>NFREQ-1?NFREQ-1:prcopt.nf-1;
-	Solution	 ->ItemIndex	=prcopt.soltype;
 	ElMask		 ->Text			=s.sprintf("%.0f",prcopt.elmin*R2D);
 	DynamicModel ->ItemIndex	=prcopt.dynamics;
 	TideCorr	 ->ItemIndex	=prcopt.tidecorr;
@@ -712,6 +737,7 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	NavSys4	     ->Checked		=prcopt.navsys&SYS_QZS;
 	NavSys5	     ->Checked		=prcopt.navsys&SYS_SBS;
 	NavSys6	     ->Checked		=prcopt.navsys&SYS_CMP;
+	NavSys7	     ->Checked		=prcopt.navsys&SYS_IRN;
 	PosOpt1		 ->Checked		=prcopt.posopt[0];
 	PosOpt2		 ->Checked		=prcopt.posopt[1];
 	PosOpt3		 ->Checked		=prcopt.posopt[2];
@@ -723,6 +749,8 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	GloAmbRes	 ->ItemIndex	=prcopt.glomodear;
 	BdsAmbRes	 ->ItemIndex	=prcopt.bdsmodear;
 	ValidThresAR ->Text			=s.sprintf("%.1f",prcopt.thresar[0]);
+	MaxPosVarAR  ->Text         =s.sprintf("%.3f",prcopt.thresar[1]);
+	GloHwBias    ->Text         =s.sprintf("%.3f",prcopt.thresar[2]);
 	OutCntResetAmb->Text		=s.sprintf("%d"  ,prcopt.maxout   );
 	FixCntHoldAmb->Text			=s.sprintf("%d"  ,prcopt.minfix   );
 	LockCntFixAmb->Text			=s.sprintf("%d"  ,prcopt.minlock  );
@@ -731,10 +759,17 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	MaxAgeDiff	 ->Text			=s.sprintf("%.1f",prcopt.maxtdiff );
 	RejectGdop   ->Text			=s.sprintf("%.1f",prcopt.maxgdop  );
 	RejectThres  ->Text			=s.sprintf("%.1f",prcopt.maxinno  );
+	VarHoldAmb   ->Text			=s.sprintf("%.4f",prcopt.varholdamb);
+	GainHoldAmb  ->Text			=s.sprintf("%.4f",prcopt.gainholdamb);
 	SlipThres	 ->Text			=s.sprintf("%.3f",prcopt.thresslip);
 	ARIter		 ->Text			=s.sprintf("%d",  prcopt.armaxiter);
+	MinFixSats	 ->Text         =s.sprintf("%d",  prcopt.minfixsats);
+	MinHoldSats	 ->Text         =s.sprintf("%d",  prcopt.minholdsats);
+	MinDropSats	 ->Text         =s.sprintf("%d",  prcopt.mindropsats);
 	NumIter		 ->Text			=s.sprintf("%d",  prcopt.niter    );
 	SyncSol		 ->ItemIndex	=prcopt.syncsol;
+	ARFilter	 ->ItemIndex	=prcopt.arfilter;
+	RcvStds	     ->ItemIndex	=prcopt.rcvstds;
 	BaselineLen	 ->Text			=s.sprintf("%.3f",prcopt.baseline[0]);
 	BaselineSig	 ->Text			=s.sprintf("%.3f",prcopt.baseline[1]);
 	BaselineConst->Checked		=prcopt.baseline[0]>0.0;
@@ -746,6 +781,8 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	FieldSep	 ->Text			=solopt.sep;
 	OutputHead	 ->ItemIndex	=solopt.outhead;
 	OutputOpt	 ->ItemIndex	=solopt.outopt;
+	OutputSingle ->ItemIndex	=prcopt.outsingle;
+	MaxSolStd	 ->Text			=s.sprintf("%.2g",solopt.maxsolstd);
 	OutputDatum  ->ItemIndex	=solopt.datum;
 	OutputHeight ->ItemIndex	=solopt.height;
 	OutputGeoid  ->ItemIndex	=solopt.geoid;
@@ -778,10 +815,14 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	RefAntN		 ->Text			=s.sprintf("%.4f",prcopt.antdel[1][1]);
 	RefAntU		 ->Text			=s.sprintf("%.4f",prcopt.antdel[1][2]);
 	MaxAveEp	 ->Text			=s.sprintf("%d",prcopt.maxaveep);
+	ChkInitRestart->Checked		=prcopt.initrst;
 	
-	RovPosTypeP	 ->ItemIndex	=prcopt.rovpos==0?0:(prcopt.rovpos==4?3:4);
-	RefPosTypeP	 ->ItemIndex	=prcopt.refpos==0?0:(prcopt.refpos==4?3:4);
-
+	RovPosTypeP	 ->ItemIndex	=0;
+	RefPosTypeP	 ->ItemIndex	=0;
+	if      (prcopt.refpos==POSOPT_RTCM  ) RefPosTypeP->ItemIndex=3;
+	else if (prcopt.refpos==POSOPT_RAW   ) RefPosTypeP->ItemIndex=4;
+	else if (prcopt.refpos==POSOPT_SINGLE) RefPosTypeP->ItemIndex=5;
+	
 	RovPosTypeF					=RovPosTypeP->ItemIndex;
 	RefPosTypeF					=RefPosTypeP->ItemIndex;
 	SetPos(RovPosTypeP->ItemIndex,editu,prcopt.ru);
@@ -811,10 +852,10 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	AnsiString DCBFile_Text=DCBFile->Text;
 	AnsiString LocalDir_Text=LocalDir->Text;
     int itype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP};
-    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
+    int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_NTRIPC_C,STR_FILE};
 	TEdit *editu[]={RovPos1,RovPos2,RovPos3};
 	TEdit *editr[]={RefPos1,RefPos2,RefPos3};
-	char buff[1024],*p,id[32],comment[256],s[64];
+	char buff[1024],*p,*q,id[32],comment[256],s[64];
 	int sat,ex;
 	prcopt_t prcopt=prcopt_default;
 	solopt_t solopt=solopt_default;
@@ -834,10 +875,52 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 		else if (strtype[i]==STR_FILE) {
 			strcpy(strpath[i],MainForm->Paths[i][2].c_str());
 		}
-		else if (strtype[i]<=STR_NTRIPCLI) {
-			strcpy(strpath[i],MainForm->Paths[i][1].c_str());
+		else if (strtype[i]==STR_TCPSVR) {
+			strcpy(buff,MainForm->Paths[i][1].c_str());
+			if ((p=strchr(buff,'/'))) *p='\0';
+			if ((p=strrchr(buff,':'))) {
+				strcpy(strpath[i],p);
+			}
+			else {
+				strcpy(strpath[i],"");
+			}
 		}
-		else if (strtype[i]<=STR_HTTP) {
+		else if (strtype[i]==STR_TCPCLI) {
+			strcpy(buff,MainForm->Paths[i][1].c_str());
+			if ((p=strchr(buff,'/'))) *p='\0';
+			if ((p=strrchr(buff,'@'))) {
+				strcpy(strpath[i],p+1);
+			}
+			else {
+				strcpy(strpath[i],buff);
+			}
+		}
+		else if (strtype[i]==STR_NTRIPSVR) {
+			strcpy(buff,MainForm->Paths[i][1].c_str());
+			if ((p=strchr(buff,':'))&&strchr(p+1,'@')) {
+				strcpy(strpath[i],p);
+			}
+			else {
+				strcpy(strpath[i],buff);
+			}
+		}
+		else if (strtype[i]==STR_NTRIPCLI) {
+			strcpy(buff,MainForm->Paths[i][1].c_str());
+			if ((p=strchr(buff,'/'))&&(q=strchr(p+1,':'))) *q='\0';
+			strcpy(strpath[i],buff);
+		}
+		else if (strtype[i]==STR_NTRIPC_S||strtype[i]==STR_NTRIPC_C) {
+			strcpy(buff,MainForm->Paths[i][1].c_str());
+			if ((p=strchr(buff,'/'))&&(q=strchr(p+1,':'))) *q='\0';
+			if ((p=strchr(buff,'@'))) {
+				*(p+1)='\0';
+				strcpy(strpath[i],buff);
+			}
+			if ((p=strchr(p?p+2:buff,':'))) {
+				strcat(strpath[i],p);
+			}
+		}
+		else if (strtype[i]==STR_FTP||strtype[i]==STR_HTTP) {
 			strcpy(strpath[i],MainForm->Paths[i][3].c_str());
 		}
 	}
@@ -857,7 +940,7 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 
 	prcopt.mode		=PosMode	 ->ItemIndex;
 	prcopt.nf		=Freq		 ->ItemIndex+1;
-	prcopt.soltype	=Solution	 ->ItemIndex;
+	prcopt.soltype	=0;   /* forward */
 	prcopt.elmin	=str2dbl(ElMask	->Text)*D2R;
 	prcopt.dynamics	=DynamicModel->ItemIndex;
 	prcopt.tidecorr	=TideCorr	 ->ItemIndex;
@@ -877,7 +960,8 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 					  (NavSys3->Checked?SYS_GAL:0)|
 					  (NavSys4->Checked?SYS_QZS:0)|
 					  (NavSys5->Checked?SYS_SBS:0)|
-					  (NavSys6->Checked?SYS_CMP:0);
+					  (NavSys6->Checked?SYS_CMP:0)|
+					  (NavSys7->Checked?SYS_IRN:0);
 	prcopt.posopt[0]=PosOpt1->Checked;
 	prcopt.posopt[1]=PosOpt2->Checked;
 	prcopt.posopt[2]=PosOpt3->Checked;
@@ -889,6 +973,8 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	prcopt.glomodear=GloAmbRes	->ItemIndex;
 	prcopt.bdsmodear=BdsAmbRes	->ItemIndex;
 	prcopt.thresar[0]=str2dbl(ValidThresAR->Text);
+	prcopt.thresar[1]=str2dbl(MaxPosVarAR->Text);
+	prcopt.thresar[2]=str2dbl(GloHwBias->Text);
 	prcopt.maxout	=str2dbl(OutCntResetAmb->Text);
 	prcopt.minfix	=str2dbl(FixCntHoldAmb->Text);
 	prcopt.minlock	=str2dbl(LockCntFixAmb->Text);
@@ -897,10 +983,17 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	prcopt.maxtdiff	=str2dbl(MaxAgeDiff	->Text);
 	prcopt.maxgdop	=str2dbl(RejectGdop ->Text);
 	prcopt.maxinno	=str2dbl(RejectThres->Text);
+	prcopt.varholdamb=str2dbl(VarHoldAmb->Text);
+	prcopt.gainholdamb=str2dbl(GainHoldAmb->Text);
 	prcopt.thresslip=str2dbl(SlipThres	->Text);
 	prcopt.armaxiter=str2dbl(ARIter		->Text);
+	prcopt.minfixsats=str2dbl(MinFixSats		->Text);
+	prcopt.minholdsats=str2dbl(MinHoldSats		->Text);
+	prcopt.mindropsats=str2dbl(MinDropSats		->Text);
 	prcopt.niter	=str2dbl(NumIter	->Text);
 	prcopt.syncsol	=SyncSol->ItemIndex;
+	prcopt.arfilter	=ARFilter->ItemIndex;
+	prcopt.rcvstds	=RcvStds->ItemIndex;
 	if (prcopt.mode==PMODE_MOVEB&&BaselineConst->Checked) {
 		prcopt.baseline[0]=str2dbl(BaselineLen->Text);
 		prcopt.baseline[1]=str2dbl(BaselineSig->Text);
@@ -913,6 +1006,8 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	strcpy(solopt.sep,FieldSep_Text.c_str());
 	solopt.outhead	=OutputHead	 ->ItemIndex;
 	solopt.outopt	=OutputOpt	 ->ItemIndex;
+	prcopt.outsingle=OutputSingle->ItemIndex;
+	solopt.maxsolstd=str2dbl(MaxSolStd->Text);
 	solopt.datum	=OutputDatum ->ItemIndex;
 	solopt.height	=OutputHeight->ItemIndex;
 	solopt.geoid	=OutputGeoid ->ItemIndex;
@@ -943,12 +1038,16 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	prcopt.antdel[1][1]=str2dbl(RefAntN->Text);
 	prcopt.antdel[1][2]=str2dbl(RefAntU->Text);
 	prcopt.maxaveep=MaxAveEp->Text.ToInt();
+	prcopt.initrst=ChkInitRestart->Checked;
 	
-	prcopt.rovpos=RovPosTypeP->ItemIndex<3?0:4;
-	prcopt.refpos=RefPosTypeP->ItemIndex<3?0:(RefPosTypeP->ItemIndex<4?4:1);
+	prcopt.rovpos=POSOPT_POS;
+	prcopt.refpos=POSOPT_POS;
+	if      (RefPosTypeP->ItemIndex==3) prcopt.refpos=POSOPT_RTCM;
+	else if (RefPosTypeP->ItemIndex==4) prcopt.refpos=POSOPT_RAW;
+	else if (RefPosTypeP->ItemIndex==5) prcopt.refpos=POSOPT_SINGLE;
 	
-	if (prcopt.rovpos==0) GetPos(RovPosTypeP->ItemIndex,editu,prcopt.ru);
-	if (prcopt.refpos==0) GetPos(RefPosTypeP->ItemIndex,editr,prcopt.rb);
+	if (prcopt.rovpos==POSOPT_POS) GetPos(RovPosTypeP->ItemIndex,editu,prcopt.ru);
+	if (prcopt.refpos==POSOPT_POS) GetPos(RefPosTypeP->ItemIndex,editr,prcopt.rb);
 	
 	strcpy(filopt.satantp,SatPcvFile_Text.c_str());
 	strcpy(filopt.rcvantp,AntPcvFile_Text.c_str());
@@ -972,7 +1071,6 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	int ar=rtk||ppp;
 	
 	Freq           ->Enabled=rel;
-	Solution       ->Enabled=false;
 	DynamicModel   ->Enabled=rel;
 	TideCorr       ->Enabled=rel||ppp;
 	PosOpt1        ->Enabled=ppp;
@@ -985,8 +1083,8 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	GloAmbRes      ->Enabled=ar&&AmbRes->ItemIndex>0&&NavSys2->Checked;
 	BdsAmbRes      ->Enabled=ar&&AmbRes->ItemIndex>0&&NavSys6->Checked;
 	ValidThresAR   ->Enabled=ar&&AmbRes->ItemIndex>=1&&AmbRes->ItemIndex<4;
-	ThresAR2       ->Enabled=ar&&AmbRes->ItemIndex>=4;
-	ThresAR3       ->Enabled=ar&&AmbRes->ItemIndex>=4;
+	MaxPosVarAR    ->Enabled=ar&&!ppp;
+	GloHwBias      ->Enabled=ar&&GloAmbRes->ItemIndex==2;
 	LockCntFixAmb  ->Enabled=ar&&AmbRes->ItemIndex>=1;
 	ElMaskAR       ->Enabled=ar&&AmbRes->ItemIndex>=1;
 	OutCntResetAmb ->Enabled=ar||ppp;
@@ -995,9 +1093,16 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	SlipThres      ->Enabled=ar||ppp;
 	MaxAgeDiff     ->Enabled=rel;
 	RejectThres    ->Enabled=rel||ppp;
+	VarHoldAmb     ->Enabled=ar&&AmbRes->ItemIndex==3;
+	GainHoldAmb    ->Enabled=ar&&AmbRes->ItemIndex==3;
 	ARIter         ->Enabled=ppp;
+	MinFixSats     ->Enabled=ar||ppp;
+	MinHoldSats    ->Enabled=ar||ppp;
+	MinDropSats    ->Enabled=ar||ppp;
 	NumIter        ->Enabled=rel||ppp;
 	SyncSol        ->Enabled=rel||ppp;
+	ARFilter       ->Enabled=ar||ppp;
+	RcvStds        ->Enabled=rel;
 	BaselineConst  ->Enabled=PosMode->ItemIndex==PMODE_MOVEB;
 	BaselineLen    ->Enabled=BaselineConst->Checked&&PosMode->ItemIndex==PMODE_MOVEB;
 	BaselineSig    ->Enabled=BaselineConst->Checked&&PosMode->ItemIndex==PMODE_MOVEB;
@@ -1008,6 +1113,7 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	TimeDecimal    ->Enabled=SolFormat->ItemIndex!=3;
 	LatLonFormat   ->Enabled=SolFormat->ItemIndex==0;
 	FieldSep       ->Enabled=SolFormat->ItemIndex!=3;
+	OutputSingle   ->Enabled=PosMode->ItemIndex!=0;
 	OutputDatum    ->Enabled=SolFormat->ItemIndex==0;
 	OutputHeight   ->Enabled=SolFormat->ItemIndex==0;
 	OutputGeoid    ->Enabled=SolFormat->ItemIndex==0&&OutputHeight->ItemIndex==1;
@@ -1037,9 +1143,9 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	RefPos3        ->Enabled=RefPosTypeP->Enabled&&RefPosTypeP->ItemIndex<=2;
 	BtnRefPos      ->Enabled=RefPosTypeP->Enabled&&RefPosTypeP->ItemIndex<=2;
 	
-	LabelMaxAveEp  ->Visible=RefPosTypeP->ItemIndex==4;
-	MaxAveEp       ->Visible=RefPosTypeP->ItemIndex==4;
-	ChkInitRestart ->Visible=RefPosTypeP->ItemIndex==4;
+	LabelMaxAveEp  ->Visible=RefPosTypeP->ItemIndex==5;
+	MaxAveEp       ->Visible=RefPosTypeP->ItemIndex==5;
+	ChkInitRestart ->Visible=RefPosTypeP->ItemIndex==5;
 	
 //	SbasSatE       ->Enabled=PosMode->ItemIndex==0;
 }
@@ -1125,8 +1231,14 @@ void __fastcall TOptDialog::ReadAntList(void)
 	free(pcvs.pcv);
 }
 //---------------------------------------------------------------------------
-
 void __fastcall TOptDialog::NavSys6Click(TObject *Sender)
+{
+	UpdateEnable();
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TOptDialog::ObsWeightChange(TObject *Sender)
 {
 	UpdateEnable();
 }

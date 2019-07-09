@@ -315,11 +315,13 @@ void TGraph::DrawMark(TPoint p, int mark, TColor color, int size, int rot)
 	// rot  = rotation angle (deg)
 	
 	// if the same mark already drawn, skip it
+#if 0
 	if (p.x==p_.x&&p.y==p_.y&&mark==mark_&&color==color_&&size==size_&&
 		rot==rot_) {
 		return;
 	}
 	p_=p; mark_=mark; color_=color; size_=size; rot_=rot;
+#endif
 	
 	TCanvas *c=Canvas;
 	if (size<1) size=1;
@@ -328,6 +330,7 @@ void TGraph::DrawMark(TPoint p, int mark, TColor color, int size, int rot)
 	int xs1[]={-7,0,-7,0},ys1[]={2,0,-2,0};
 	int xs2[]={-1,-1,-1,1,1,1},ys2[]={-1,1,0,0,-1,1};
 	int xs3[]={3,-4,0,0,0,-8,8},ys3[]={0,5,20,-20,-10,-10,-10};
+	int xs4[]={0,0,0,1,-1},ys4[]={1,-1,0,0,0};
 	TPoint ps[32],pr[32],pd(0,size/2+12),pt;
 	c->Pen->Color=color; c->Pen->Style=psSolid; c->Brush->Color=color;
 	switch (mark) {
@@ -353,10 +356,18 @@ void TGraph::DrawMark(TPoint p, int mark, TColor color, int size, int rot)
 			ps[0].x=-size/2; ps[0].y=0; ps[1].x=size/2; ps[1].y=0;
 			break;
 		case 5: // plus
+#if 0
 			c->Brush->Style=bsClear;
 			c->MoveTo(x1,p.y); c->LineTo(x2,p.y);
 			c->MoveTo(p.x,y2); c->LineTo(p.x,y1);
 			return;
+#else
+			n=5;
+			for (int i=0;i<n;i++) {
+				ps[i].x=xs4[i]*s; ps[i].y=ys4[i]*s;
+			}
+			break;
+#endif
 		case 10: // arrow
 			n=6;
 			ps[0].x=-size/2; ps[0].y=0; ps[1].x=size/2; ps[1].y=0;
@@ -432,8 +443,10 @@ void TGraph::DrawText(TPoint p, AnsiString str, TColor color, int ha, int va,
 	// va  = vertical alignment   (0: center, 1: bottom, 2: top  )
 	// rot = rotation angle (deg)
 
-	UnicodeString u_str(str);
-	
+    wchar_t buff[1024]={0};
+    ::MultiByteToWideChar(CP_UTF8,0,str.c_str(),-1,buff,2048);
+    UnicodeString u_str(buff);
+    
 	TCanvas *c=Canvas;
 	AnsiString Font_Name=c->Font->Name;
 	LOGFONT lf={0};
@@ -555,18 +568,22 @@ int TGraph::ClipPoint(TPoint *p0, int area, TPoint *p1)
 {
 	int x,y,xmin=X,xmax=X+Width-1,ymin=Y,ymax=Y+Height-1;
 	if (area&1) { // left
+		if (p0->x==p1->x) return 0;
 		y=p0->y+(p1->y-p0->y)*(xmin-p0->x)/(p1->x-p0->x);
 		if (ymin<=y&&y<=ymax) {p0->x=xmin; p0->y=y; return 1;}
 	}
 	if (area&2) { // right
+		if (p0->x==p1->x) return 0;
 		y=p0->y+(p1->y-p0->y)*(xmax-p0->x)/(p1->x-p0->x);
 		if (ymin<=y&&y<=ymax) {p0->x=xmax; p0->y=y; return 1;}
 	}
 	if (area&4) { // upper
+		if (p0->y==p1->y) return 0;
 		x=p0->x+(p1->x-p0->x)*(ymin-p0->y)/(p1->y-p0->y);
 		if (xmin<=x&&x<=xmax) {p0->x=x; p0->y=ymin; return 1;}
 	}
 	if (area&8) { // lower
+		if (p0->y==p1->y) return 0;
 		x=p0->x+(p1->x-p0->x)*(ymax-p0->y)/(p1->y-p0->y);
 		if (xmin<=x&&x<=xmax) {p0->x=x; p0->y=ymax; return 1;}
 	}

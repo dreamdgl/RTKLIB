@@ -18,8 +18,6 @@
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
-static const char rcsid[]="$Id:$";
-
 #define SQR(x)      ((x)*(x))
 #define VAR_NOTEC   SQR(30.0)   /* variance of no tec */
 #define MIN_EL      0.0         /* min elevation angle (rad) */
@@ -376,7 +374,7 @@ static int interptec(const tec_t *tec, int k, const double *posp, double *value,
 static int iondelay(gtime_t time, const tec_t *tec, const double *pos,
                     const double *azel, int opt, double *delay, double *var)
 {
-    const double fact=40.30E16/FREQ1/FREQ1; /* tecu->L1 iono (m) */
+    const double fact=40.30E16/FREQL1/FREQL1; /* tecu->L1 iono (m) */
     double fs,posp[3]={0},vtec,rms,hion,rp;
     int i;
     

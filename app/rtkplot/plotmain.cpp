@@ -99,6 +99,7 @@ __fastcall TPlot::TPlot(TComponent* Owner) : TForm(Owner)
     SimObs=0;
     
     X0=Y0=Xc=Yc=Xs=Ys=Xcent=0.0;
+    MouseDownTick=0;
     GEState=GEDataState[0]=GEDataState[1]=0;
     GEHeading=0.0;
     OEpoch=t0;
@@ -175,14 +176,18 @@ __fastcall TPlot::TPlot(TComponent* Owner) : TForm(Owner)
     FrqType->Items->Clear();
     FrqType->Items->Add("L1/LC");
     if (nfreq>=2) FrqType->Items->Add("L2");
-    if (nfreq>=3) FrqType->Items->Add("L5");
-    if (nfreq>=4) FrqType->Items->Add("L6");
-    if (nfreq>=5) FrqType->Items->Add("L7");
-    if (nfreq>=6) FrqType->Items->Add("L8");
+    if (nfreq>=3) FrqType->Items->Add("E5b");
+    if (nfreq>=4) FrqType->Items->Add("L5");
+    if (nfreq>=5) FrqType->Items->Add("E6");
+    if (nfreq>=6) FrqType->Items->Add("E5ab");
     FrqType->ItemIndex=0;
     
     TLEData.n=TLEData.nmax=0;
     TLEData.data=NULL;
+    
+    // set current directory as commend search path
+    AnsiString cd=GetCurrentDir();
+    ::SetEnvironmentVariable("PATH",cd.c_str());
 }
 // callback on form-create --------------------------------------------------
 void __fastcall TPlot::FormCreate(TObject *Sender)
@@ -194,7 +199,7 @@ void __fastcall TPlot::FormShow(TObject *Sender)
 {
     AnsiString cmd,s;
     int i,argc=0;
-    char *p,*argv[32],buff[1024],*path1="",*path2="";
+    char *p,*argv[32],buff[1024],*path1="",*path2="",str_path[256];
     
     trace(3,"FormShow\n");
     
@@ -220,6 +225,7 @@ void __fastcall TPlot::FormShow(TObject *Sender)
     
     for (i=1;i<argc;i++) {
         if      (!strcmp(argv[i],"-r" )) OpenRaw=1;
+        else if (!strcmp(argv[i],"-i" )&&i+1<argc);
         else if (!strcmp(argv[i],"-p" )&&i+1<argc) path1=argv[++i];
         else if (!strcmp(argv[i],"-p1")&&i+1<argc) path1=argv[++i];
         else if (!strcmp(argv[i],"-p2")&&i+1<argc) path2=argv[++i];
@@ -234,7 +240,6 @@ void __fastcall TPlot::FormShow(TObject *Sender)
     UpdateColor();
     UpdateSatMask();
     UpdateOrigin();
-    UpdateEnable();
     
     if (*path1||*path2) {
         ConnectPath(path1,0);
@@ -254,8 +259,25 @@ void __fastcall TPlot::FormShow(TObject *Sender)
     if (TLESatFile!="") {
         tle_name_read(TLESatFile.c_str(),&TLEData);
     }
+    if (MenuBrowse->Checked) {
+        Splitter1->Left=PanelBrowse->Width;
+        PanelBrowse->Visible=true;
+        Splitter1->Visible=true;
+    }
+    else {
+        PanelBrowse->Visible=false;
+        Splitter1->Visible=false;
+    }
+    strinit(&StrTimeSync);
+    NStrBuff=0;
+    
+    if (TimeSyncOut) {
+        sprintf(str_path,":%d",TimeSyncPort);
+        stropen(&StrTimeSync,STR_TCPSVR,STR_MODE_RW,str_path);
+    }
     Timer->Interval=RefCycle;
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on form-close ---------------------------------------------------
 void __fastcall TPlot::FormClose(TObject *Sender, TCloseAction &Action)
@@ -436,13 +458,6 @@ void __fastcall TPlot::MenuVisAnaClick(TObject *Sender)
         GenVisData();
     }
     SpanDialog->TimeVal[0]=SpanDialog->TimeVal[1]=SpanDialog->TimeVal[2]=1;
-}
-// callback on menu-sol-browse ----------------------------------------------
-void __fastcall TPlot::MenuFileSelClick(TObject *Sender)
-{
-    trace(3,"MenuFileSelClick\n");
-    
-    FileSelDialog->Show();
 }
 // callback on menu-save image ----------------------------------------------
 void __fastcall TPlot::MenuSaveImageClick(TObject *Sender)
@@ -672,6 +687,7 @@ void __fastcall TPlot::MenuMapLayerClick(TObject *Sender)
 	if (VecMapDialog->ShowModal()!=mrOk) return;
 	
 	UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-solution-source -----------------------------------------
 void __fastcall TPlot::MenuSrcSolClick(TObject *Sender)
@@ -699,7 +715,7 @@ void __fastcall TPlot::MenuSrcObsClick(TObject *Sender)
     if (ObsFiles->Count<=0) return;
     
     strcpy(file,U2A(ObsFiles->Strings[0]).c_str());
-    cstat=uncompress(file,tmpfile);
+    cstat=rtk_uncompress(file,tmpfile);
     viewer=new TTextViewer(Application);
     viewer->Caption=ObsFiles->Strings[0];
     viewer->Option=0;
@@ -745,7 +761,8 @@ void __fastcall TPlot::MenuOptionsClick(TObject *Sender)
 {
     AnsiString tlefile=TLEFile,tlesatfile=TLESatFile;
     double oopos[3],range;
-    char file[1024];
+    char file[1024],str_path[256];
+    int timesyncout=TimeSyncOut;
     
     trace(3,"MenuOptionsClick\n");
     
@@ -791,6 +808,13 @@ void __fastcall TPlot::MenuOptionsClick(TObject *Sender)
             RangeList->Selected[i]=true;
         }
     }
+    if (!timesyncout&&TimeSyncOut) {
+        sprintf(str_path,":%d",TimeSyncPort);
+        stropen(&StrTimeSync,STR_TCPSVR,STR_MODE_RW,str_path);
+    }
+    else if (timesyncout&&!TimeSyncOut) {
+        strclose(&StrTimeSync);
+    }
 }
 // callback on menu-show-tool-bar -------------------------------------------
 void __fastcall TPlot::MenuToolBarClick(TObject *Sender)
@@ -809,6 +833,24 @@ void __fastcall TPlot::MenuStatusBarClick(TObject *Sender)
     
     MenuStatusBar->Checked=!MenuStatusBar->Checked;
     Panel2->Visible=MenuStatusBar->Checked;
+    UpdateSize();
+    Refresh();
+}
+// callback on menu-show-browse-panel ---------------------------------------
+void __fastcall TPlot::MenuBrowseClick(TObject *Sender)
+{
+    trace(3,"MenuBrowseClick\n");
+    
+	MenuBrowse->Checked=!MenuBrowse->Checked;
+    if (MenuBrowse->Checked) {
+        Splitter1->Left=PanelBrowse->Width;
+        PanelBrowse->Visible=true;
+        Splitter1->Visible=true;
+    }
+    else {
+        PanelBrowse->Visible=false;
+        Splitter1->Visible=false;
+    }
     UpdateSize();
     Refresh();
 }
@@ -885,14 +927,25 @@ void __fastcall TPlot::MenuShowSkyplotClick(TObject *Sender)
     
     BtnShowSkyplot->Down=!BtnShowSkyplot->Down;
     UpdatePlot();
+    UpdateEnable();
+}
+// callback on menu-show-grid -----------------------------------------------
+void __fastcall TPlot::MenuShowGridClick(TObject *Sender)
+{
+    trace(3,"MenuShowGrid\n");
+    
+    BtnShowGrid->Down=!BtnShowGrid->Down;
+    UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-show-map-image ------------------------------------------
-void __fastcall TPlot::MenuShowMapClick(TObject *Sender)
+void __fastcall TPlot::MenuShowImgClick(TObject *Sender)
 {
     trace(3,"MenuShowMapClick\n");
     
     BtnShowMap->Down=!BtnShowMap->Down;
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-show-track-points ---------------------------------------
 void __fastcall TPlot::MenuShowTrackClick(TObject *Sender)
@@ -905,6 +958,7 @@ void __fastcall TPlot::MenuShowTrackClick(TObject *Sender)
         BtnFixVert ->Down=false;
     }
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-fix-center ----------------------------------------------
 void __fastcall TPlot::MenuFixCentClick(TObject *Sender)
@@ -913,6 +967,7 @@ void __fastcall TPlot::MenuFixCentClick(TObject *Sender)
     
     BtnFixCent->Down=!BtnFixCent->Down;
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-fix-horizontal ------------------------------------------
 void __fastcall TPlot::MenuFixHorizClick(TObject *Sender)
@@ -922,6 +977,7 @@ void __fastcall TPlot::MenuFixHorizClick(TObject *Sender)
     BtnFixHoriz->Down=!BtnFixHoriz->Down;
     Xcent=0.0;
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-fix-vertical --------------------------------------------
 void __fastcall TPlot::MenuFixVertClick(TObject *Sender)
@@ -930,18 +986,20 @@ void __fastcall TPlot::MenuFixVertClick(TObject *Sender)
     
     BtnFixVert->Down=!BtnFixVert->Down;
     UpdatePlot();
+    UpdateEnable();
 }
-// callback on menu-show-waypoints ------------------------------------------
-void __fastcall TPlot::MenuShowPointClick(TObject *Sender)
+// callback on menu-show-map ------------------------------------------------
+void __fastcall TPlot::MenuShowMapClick(TObject *Sender)
 {
     trace(3,"MenuShowPointClick\n");
     
-    BtnShowPoint->Down=!BtnShowPoint->Down;
+    BtnShowMap->Down=!BtnShowMap->Down;
     
 #if 0
     if (BtnShowPoint->Down) UpdatePntsGE();
 #endif
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on menu-animation-start -----------------------------------------
 void __fastcall TPlot::MenuAnimStartClick(TObject *Sender)
@@ -956,6 +1014,101 @@ void __fastcall TPlot::MenuAnimStopClick(TObject *Sender)
     trace(3,"MenuAnimStopClick\n");
     
     BtnAnimate->Down=false;
+}
+// callback on menu-windows-maximize ----------------------------------------
+void __fastcall TPlot::MenuMaxClick(TObject *Sender)
+{
+    TRect rect;
+    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
+	Top=rect.Top;
+	Left=rect.Left;
+	Width=rect.Width();
+	Height=rect.Height();
+    GoogleEarthView->Hide();
+    GoogleMapView->Hide();
+}
+// callback on menu-windows-plot-ge -----------------------------------------
+void __fastcall TPlot::MenuPlotGEClick(TObject *Sender)
+{
+    TRect rect;
+    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
+	Top=rect.Top;
+	Left=rect.Left;
+	Width=rect.Width()/2;
+	Height=rect.Height();
+    GoogleEarthView->Top=Top;
+    GoogleEarthView->Left=Width;
+    GoogleEarthView->Width=Width;
+    GoogleEarthView->Height=Height;
+    GoogleMapView->Hide();
+    GoogleEarthView->Show();
+}
+// callback on menu-windows-plot-gm -----------------------------------------
+void __fastcall TPlot::MenuPlotGMClick(TObject *Sender)
+{
+    TRect rect;
+    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
+	Top=rect.Top;
+	Left=rect.Left;
+	Width=rect.Width()/2;
+	Height=rect.Height();
+    GoogleMapView->Top=Top;
+    GoogleMapView->Left=Width;
+    GoogleMapView->Width=Width;
+    GoogleMapView->Height=Height;
+    GoogleEarthView->Hide();
+    GoogleMapView->Show();
+}
+// callback on menu-windows-plot-ge/gm --------------------------------------
+void __fastcall TPlot::MenuPlotGEGMClick(TObject *Sender)
+{
+    TRect rect;
+    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
+	Top=rect.Top;
+	Left=rect.Left;
+	Width=rect.Width()/2;
+	Height=rect.Height();
+    GoogleEarthView->Top=Top;
+    GoogleEarthView->Left=Width;
+    GoogleEarthView->Width=Width;
+    GoogleEarthView->Height=Height/2;
+    GoogleMapView->Top=Top+Height/2;
+    GoogleMapView->Left=Width;
+    GoogleMapView->Width=Width;
+    GoogleMapView->Height=Height/2;
+    GoogleEarthView->Show();
+    GoogleMapView->Show();
+}
+//---------------------------------------------------------------------------
+void __fastcall TPlot::DispGesture(TObject *Sender, const TGestureEventInfo &EventInfo,
+          bool &Handled)
+{
+#if 0
+    AnsiString s;
+    int b,e;
+    
+    b=EventInfo.Flags.Contains(gfBegin);
+    e=EventInfo.Flags.Contains(gfEnd);
+    
+	if (EventInfo.GestureID==Controls::igiZoom) {
+        s.sprintf("zoom: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
+                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
+                  EventInfo.Angle,EventInfo.Distance);
+        Message1->Caption=s;
+    }
+	else if (EventInfo.GestureID==Controls::igiPan) {
+        s.sprintf("pan: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
+                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
+                  EventInfo.Angle,EventInfo.Distance);
+        Message1->Caption=s;
+    }
+	else if (EventInfo.GestureID==Controls::igiRotate) {
+        s.sprintf("rotate: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
+                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
+                  EventInfo.Angle,EventInfo.Distance);
+        Message1->Caption=s;
+    }
+#endif
 }
 // callback on menu-about ---------------------------------------------------
 void __fastcall TPlot::MenuAboutClick(TObject *Sender)
@@ -982,6 +1135,7 @@ void __fastcall TPlot::BtnSol1Click(TObject *Sender)
     BtnSol12->Down=false;
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-solution-2 --------------------------------------------
 void __fastcall TPlot::BtnSol2Click(TObject *Sender)
@@ -991,6 +1145,7 @@ void __fastcall TPlot::BtnSol2Click(TObject *Sender)
     BtnSol12->Down=false;
     UpdateTime();
     UpdatePlot(); 
+    UpdateEnable();
 }
 // callback on button-solution-1-2 ------------------------------------------
 void __fastcall TPlot::BtnSol12Click(TObject *Sender)
@@ -1001,6 +1156,7 @@ void __fastcall TPlot::BtnSol12Click(TObject *Sender)
     BtnSol2->Down=false;
     UpdateTime();
     UpdatePlot(); 
+    UpdateEnable();
 }
 // callback on button-solution-1 double-click -------------------------------
 void __fastcall TPlot::BtnSol1DblClick(TObject *Sender)
@@ -1017,7 +1173,7 @@ void __fastcall TPlot::BtnSol2DblClick(TObject *Sender)
     MenuOpenSol2Click(Sender);
 }
 // callback on button-show-map-image ----------------------------------------
-void __fastcall TPlot::BtnShowMapClick(TObject *Sender)
+void __fastcall TPlot::BtnShowImgClick(TObject *Sender)
 {
     trace(3,"BtnShowMapClick\n");
     
@@ -1028,6 +1184,14 @@ void __fastcall TPlot::BtnShowMapClick(TObject *Sender)
 void __fastcall TPlot::BtnShowSkyplotClick(TObject *Sender)
 {
     trace(3,"BtnShowSkyplotClick\n");
+    
+	UpdateEnable();
+    Refresh();
+}
+//---------------------------------------------------------------------------
+void __fastcall TPlot::BtnShowGridClick(TObject *Sender)
+{
+    trace(3,"BtnShowGridClick\n");
     
 	UpdateEnable();
     Refresh();
@@ -1082,6 +1246,7 @@ void __fastcall TPlot::RangeListClick(TObject *Sender)
     YRange=range;
     SetRange(0,YRange);
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-center-origin -----------------------------------------
 void __fastcall TPlot::BtnCenterOriClick(TObject *Sender)
@@ -1115,6 +1280,7 @@ void __fastcall TPlot::BtnShowTrackClick(TObject *Sender)
         BtnFixVert ->Down=false;
     }
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-fix-horizontal ----------------------------------------
 void __fastcall TPlot::BtnFixHorizClick(TObject *Sender)
@@ -1123,6 +1289,7 @@ void __fastcall TPlot::BtnFixHorizClick(TObject *Sender)
     
     Xcent=0.0;
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-fix-vertical ------------------------------------------
 void __fastcall TPlot::BtnFixVertClick(TObject *Sender)
@@ -1130,6 +1297,7 @@ void __fastcall TPlot::BtnFixVertClick(TObject *Sender)
     trace(3,"BtnFixVertClick\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-fix-center --------------------------------------------
 void __fastcall TPlot::BtnFixCentClick(TObject *Sender)
@@ -1137,13 +1305,15 @@ void __fastcall TPlot::BtnFixCentClick(TObject *Sender)
     trace(3,"BtnFixCentClick\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-show-waypoints ----------------------------------------
-void __fastcall TPlot::BtnShowPointClick(TObject *Sender)
+void __fastcall TPlot::BtnShowMapClick(TObject *Sender)
 {
     trace(3,"BtnShowPointClick\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on button-options -----------------------------------------------
 void __fastcall TPlot::BtnOptionsClick(TObject *Sender)
@@ -1204,6 +1374,7 @@ void __fastcall TPlot::PlotTypeSChange(TObject *Sender)
     }
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on quality-flag selection change --------------------------------
 void __fastcall TPlot::QFlagChange(TObject *Sender)
@@ -1211,6 +1382,7 @@ void __fastcall TPlot::QFlagChange(TObject *Sender)
     trace(3,"QFlagChange\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on obs-type selection change ------------------------------------
 void __fastcall TPlot::ObsTypeChange(TObject *Sender)
@@ -1218,6 +1390,7 @@ void __fastcall TPlot::ObsTypeChange(TObject *Sender)
     trace(3,"ObsTypeChange\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on dop-type selection change ------------------------------------
 void __fastcall TPlot::DopTypeChange(TObject *Sender)
@@ -1225,6 +1398,7 @@ void __fastcall TPlot::DopTypeChange(TObject *Sender)
     trace(3,"DopTypeChange\n");
     
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on satellite-list selection change ------------------------------
 void __fastcall TPlot::SatListChange(TObject *Sender)
@@ -1233,6 +1407,7 @@ void __fastcall TPlot::SatListChange(TObject *Sender)
     
     UpdateSatSel();
     UpdatePlot();
+    UpdateEnable();
 }
 // callback on time scroll-bar change ---------------------------------------
 void __fastcall TPlot::TimeScrollChange(TObject *Sender)
@@ -1260,9 +1435,9 @@ void __fastcall TPlot::DispPaint(TObject *Sender)
 void __fastcall TPlot::DispMouseDown(TObject *Sender, TMouseButton Button,
       TShiftState Shift, int X, int Y)
 {
-    X0=X; Y0=Y; Xcent0=Xcent;
-    
     trace(3,"DispMouseDown: X=%d Y=%d\n",X,Y);
+    
+    X0=X; Y0=Y; Xcent0=Xcent;
     
     Drag=Shift.Contains(ssLeft)?1:(Shift.Contains(ssRight)?11:0);
     
@@ -1316,6 +1491,34 @@ void __fastcall TPlot::DispMouseUp(TObject *Sender, TMouseButton Button,
     Drag=0;
     Screen->Cursor=crDefault;
     Refresh();
+    Refresh_GEView();
+}
+// callback on mouse-double-click -------------------------------------------
+void __fastcall TPlot::DispDblClick(TObject *Sender)
+{
+    TPoint p((int)X0,(int)Y0);
+    double x,y;
+    
+    trace(3,"DispDblClick X=%d Y=%d\n",p.x,p.y);
+    
+    if (BtnFixHoriz->Down) return;
+    
+    if (PlotType==PLOT_TRK) {
+        GraphT->ToPos(p,x,y);
+        GraphT->SetCent(x,y);
+        Refresh();
+        Refresh_GEView();
+    }
+    else if (PlotType<=PLOT_NSAT||PlotType==PLOT_RES||PlotType==PLOT_SNR) {
+        GraphG[0]->ToPos(p,x,y);
+        SetCentX(x);
+        Refresh();
+    }
+    else if (PlotType==PLOT_OBS||PlotType==PLOT_DOP) {
+        GraphR->ToPos(p,x,y);
+        SetCentX(x);
+        Refresh();
+    }
 }
 // callback on mouse-leave event --------------------------------------------
 void __fastcall TPlot::DispMouseLeave(TObject *Sender)
@@ -1696,8 +1899,10 @@ void __fastcall TPlot::TimerTimer(TObject *Sender)
     AnsiString connectmsg="",s;
     static unsigned char buff[16384];
     solopt_t opt=solopt_default;
+    sol_t *sol;
     const gtime_t ts={0};
-    double tint=TimeEna[2]?TimeInt:0.0,pos[3];
+    gtime_t time={0};
+    double tint=TimeEna[2]?TimeInt:0.0,pos[3],ep[6];
     int i,j,n,inb,inr,cycle,nmsg[2]={0},stat,istat;
     int sel=!BtnSol1->Down&&BtnSol2->Down?1:0;
     char msg[MAXSTRMSG]="",tstr[32];
@@ -1771,6 +1976,45 @@ void __fastcall TPlot::TimerTimer(TObject *Sender)
                 BtnAnimate->Down=false;
             }
         }
+    }
+    else if (TimeSyncOut) { // time sync
+        time.time = 0;
+        while (strread(&StrTimeSync, (unsigned char *)StrBuff+NStrBuff, 1)) {
+            if (++NStrBuff >= 1023) {
+                NStrBuff = 0;
+                continue;
+            }
+            if (StrBuff[NStrBuff-1]=='\n') {
+                StrBuff[NStrBuff-1]='\0';
+                if (sscanf(StrBuff,"%lf/%lf/%lf %lf:%lf:%lf",ep,ep+1,ep+2,
+                           ep+3,ep+4,ep+5)>=6) {
+                    time=epoch2time(ep);
+                }
+                NStrBuff = 0;
+            }
+        }
+        if (time.time&&(PlotType<=PLOT_NSAT||PlotType<=PLOT_RES)) {
+           i=SolIndex[sel];
+           if (!(sol=getsol(SolData+sel,i))) return;
+           double tt=timediff(sol->time,time);
+           if (tt<-DTTOL) {
+               for (;i<SolData[sel].n;i++) {
+                   if (!(sol=getsol(SolData+sel,i))) continue;
+                   if (timediff(sol->time,time)>=-DTTOL) {
+                       i--;
+                       break;
+                   }
+               }
+           }
+           else if (tt>DTTOL) {
+               for (;i>=0;i--) {
+                   if (!(sol=getsol(SolData+sel,i))) continue;
+                   if (timediff(sol->time,time)<=DTTOL) break;
+               }
+           }
+           SolIndex[sel]=MAX(0,MIN(SolData[sel].n-1,i));
+        }
+        else return;
     }
     else return;
     
@@ -1849,7 +2093,7 @@ void __fastcall TPlot::UpdateSize(void)
     p1.y=tmargin; p2.y=p1.y;
     for (i=n=0;i<3;i++) if (btn[i]->Down) n++;
     for (i=0;i<3;i++) {
-        if (!btn[i]->Down) continue;
+        if (!btn[i]->Down||n<=0) continue;
         h=(Disp->Height-tmargin-bmargin)/n;
         p2.y+=h;
         GraphG[i]->SetPos(p1,p2);
@@ -1858,7 +2102,7 @@ void __fastcall TPlot::UpdateSize(void)
     p1.y=tmargin; p2.y=p1.y;
     for (i=n=0;i<2;i++) if (btn[i]->Down) n++;
     for (i=0;i<2;i++) {
-        if (!btn[i]->Down) continue;
+        if (!btn[i]->Down||n<=0) continue;
         h=(Disp->Height-tmargin-bmargin)/n;
         p2.y+=h;
         GraphE[i]->SetPos(p1,p2);
@@ -2022,9 +2266,7 @@ void __fastcall TPlot::UpdateOrigin(void)
         OPos[i]=opos[i];
         OVel[i]=ovel[i];
     }
-    ecef2pos(OPos,pos);
-    GoogleEarthView->SetView(pos[0]*R2D,pos[1]*R2D,0.0,0.0);
-    GoogleMapView->SetView(pos[0]*R2D,pos[1]*R2D,13);
+    Refresh_GEView();
 }
 // update satellite mask ----------------------------------------------------
 void __fastcall TPlot::UpdateSatMask(void)
@@ -2081,49 +2323,90 @@ void __fastcall TPlot::UpdateEnable(void)
     
     BtnConnect     ->Down   = ConnectState;
     BtnSol2        ->Enabled=PlotType<=PLOT_NSAT||PlotType==PLOT_RES;
-    BtnSol12       ->Visible=!ConnectState&&PlotType<=PLOT_SOLA&&SolData[0].n>0&&SolData[1].n>0;
+    BtnSol12       ->Enabled=!ConnectState&&PlotType<=PLOT_SOLA&&SolData[0].n>0&&SolData[1].n>0;
     
-    QFlag          ->Visible=PlotType<=PLOT_NSAT;
-    ObsType        ->Visible=PlotType==PLOT_OBS||PlotType<=PLOT_SKY;
+    QFlag          ->Visible=PlotType==PLOT_TRK ||PlotType==PLOT_SOLP||
+                             PlotType==PLOT_SOLV||PlotType==PLOT_SOLA||
+                             PlotType==PLOT_NSAT;
+    ObsType        ->Visible=PlotType==PLOT_OBS||PlotType==PLOT_SKY;
     ObsType2       ->Visible=PlotType==PLOT_SNR||PlotType==PLOT_SNRE||PlotType==PLOT_MPS;
-    ObsType        ->Enabled=!SimObs;
-    ObsType2       ->Enabled=!SimObs;
     FrqType        ->Visible=PlotType==PLOT_RES;
     DopType        ->Visible=PlotType==PLOT_DOP;
-    SatList        ->Visible=PlotType>=PLOT_OBS||PlotType==PLOT_RES;
-    SatList        ->Enabled=PlotType>=PLOT_OBS||PlotType==PLOT_SKY||
-                             PlotType==PLOT_DOP||PlotType==PLOT_SNR||
-                             PlotType==PLOT_RES;
+    SatList        ->Visible=PlotType==PLOT_RES||PlotType>=PLOT_OBS||
+                             PlotType==PLOT_SKY||PlotType==PLOT_DOP||
+                             PlotType==PLOT_SNR||PlotType==PLOT_SNRE||
+                             PlotType==PLOT_MPS;
+    QFlag          ->Enabled=data;
+    ObsType        ->Enabled=data&&!SimObs;
+    ObsType2       ->Enabled=data&&!SimObs;
     
     BtnOn1         ->Enabled=plot||PlotType==PLOT_SNR||PlotType==PLOT_RES||PlotType==PLOT_SNRE;
     BtnOn2         ->Enabled=plot||PlotType==PLOT_SNR||PlotType==PLOT_RES||PlotType==PLOT_SNRE;
     BtnOn3         ->Enabled=plot||PlotType==PLOT_SNR||PlotType==PLOT_RES;
     
-    BtnCenterOri   ->Visible=PlotType<=PLOT_RES;
-    BtnCenterOri   ->Enabled=(plot||PlotType==PLOT_TRK);
-    BtnRangeList   ->Visible=BtnCenterOri->Visible;
-    BtnRangeList   ->Enabled=BtnCenterOri->Enabled;
+    BtnRangeList   ->Left=23;
+    BtnCenterOri   ->Visible=PlotType==PLOT_TRK ||PlotType==PLOT_SOLP||
+                             PlotType==PLOT_SOLV||PlotType==PLOT_SOLA||
+                             PlotType==PLOT_NSAT;
+    BtnRangeList   ->Visible=PlotType==PLOT_TRK ||PlotType==PLOT_SOLP||
+                             PlotType==PLOT_SOLV||PlotType==PLOT_SOLA||
+                             PlotType==PLOT_NSAT;
+    BtnCenterOri   ->Enabled=PlotType!=PLOT_NSAT;
+    BtnRangeList   ->Enabled=PlotType!=PLOT_NSAT;
+    
+    Panel102       ->Left=156;
+    Panel103       ->Left=170;
+    Panel104       ->Left=220;
+    BtnFitHoriz    ->Left=250;
+    BtnFitVert     ->Left=275;
+    BtnShowTrack   ->Left=300;
+    BtnFixCent     ->Left=325;
+    BtnFixHoriz    ->Left=350;
+    BtnFixVert     ->Left=375;
+    BtnShowGrid    ->Left=400;
+    BtnShowSkyplot ->Left=425;
+    BtnShowMap     ->Left=450;
+    BtnShowImg     ->Left=475;
+    BtnGE          ->Left=500;
+    BtnGM          ->Left=525;
+    
+    Panel102       ->Visible=PlotType==PLOT_SOLP||PlotType==PLOT_SOLV||
+                             PlotType==PLOT_SOLA||PlotType==PLOT_NSAT||
+                             PlotType==PLOT_RES ||
+                             PlotType==PLOT_SNR ||PlotType==PLOT_SNRE;
+    BtnFitHoriz    ->Visible=PlotType==PLOT_SOLP||PlotType==PLOT_SOLV||
+                             PlotType==PLOT_SOLA||PlotType==PLOT_NSAT||
+                             PlotType==PLOT_RES ||PlotType==PLOT_OBS ||
+                             PlotType==PLOT_DOP ||PlotType==PLOT_SNR ||
+                             PlotType==PLOT_SNRE;
+    BtnFitHoriz    ->Enabled=data;
+    BtnFitVert     ->Visible=PlotType==PLOT_TRK ||PlotType==PLOT_SOLP||
+                             PlotType==PLOT_SOLV||PlotType==PLOT_SOLA;
+    BtnFitVert     ->Enabled=data;
     
     BtnShowTrack   ->Enabled=data;
-    BtnFitHoriz    ->Enabled=data&&PlotType!=PLOT_SKY&&PlotType!=PLOT_SNRE&&PlotType!=PLOT_TRK;
-    BtnFitVert     ->Enabled=data&&PlotType<=PLOT_SOLA;
     
-    BtnFixCent     ->Enabled=data&&PlotType==PLOT_TRK;
-    BtnFixHoriz    ->Enabled=data&&(PlotType==PLOT_SOLP||PlotType==PLOT_SOLV||
-                                    PlotType==PLOT_SOLA||PlotType==PLOT_OBS ||
-                                    PlotType==PLOT_DOP ||PlotType==PLOT_RES ||
-                                    PlotType==PLOT_SNR);
-    BtnFixVert     ->Enabled=data&&plot&&PlotType!=PLOT_TRK&&PlotType!=PLOT_NSAT;
-    BtnShowPoint   ->Enabled=(PlotType==PLOT_TRK)&&!BtnSol12->Down;
-    
+    BtnFixCent     ->Visible=PlotType==PLOT_TRK;
+    BtnFixCent     ->Enabled=data;
+    BtnFixHoriz    ->Visible=PlotType==PLOT_SOLP||PlotType==PLOT_SOLV||
+                             PlotType==PLOT_SOLA||PlotType==PLOT_NSAT||
+                             PlotType==PLOT_RES ||PlotType==PLOT_OBS ||
+                             PlotType==PLOT_DOP ||PlotType==PLOT_RES ||
+                             PlotType==PLOT_SNR;
+    BtnFixHoriz    ->Enabled=data;
+    BtnFixVert     ->Visible=PlotType==PLOT_SOLP||PlotType==PLOT_SOLV||
+                             PlotType==PLOT_SOLA;
+    BtnFixVert     ->Enabled=data;
+    BtnShowGrid    ->Visible=PlotType==PLOT_TRK;
     BtnShowSkyplot ->Visible=PlotType==PLOT_SKY||PlotType==PLOT_MPS;
-    BtnShowMap     ->Visible=(PlotType==PLOT_TRK&&MapImage->Height>0&&!BtnSol12->Down)||
-                             (PlotType==PLOT_SKY&&SkyImageI->Height>0)||
-                             (PlotType==PLOT_MPS&&SkyImageI->Height>0);
+    BtnShowMap     ->Visible=PlotType==PLOT_TRK;
+    BtnShowMap     ->Enabled=!BtnSol12->Down;
+    BtnShowImg     ->Visible=PlotType==PLOT_TRK||PlotType==PLOT_SKY||
+                             PlotType==PLOT_MPS;
     BtnAnimate     ->Visible=data&&BtnShowTrack->Down;
+    BtnGE          ->Visible=PlotType==PLOT_TRK;
+    BtnGM          ->Visible=PlotType==PLOT_TRK;
     TimeScroll     ->Visible=data&&BtnShowTrack->Down;
-    BtnGE          ->Enabled=SolData[0].n>0||SolData[1].n>0;
-    BtnGM          ->Enabled=SolData[0].n>0||SolData[1].n>0;
     
     if (!BtnShowTrack->Down) {
         BtnFixHoriz->Enabled=false;
@@ -2131,23 +2414,6 @@ void __fastcall TPlot::UpdateEnable(void)
         BtnFixCent ->Enabled=false;
         BtnAnimate ->Down   =false;
     }
-#if 0
-    BtnCenterOri   ->Left=270;
-    BtnRangeList   ->Left=290;
-    BtnShowTrack   ->Left=310;
-    BtnFitHoriz    ->Left=330;
-    BtnFitVert     ->Left=350;
-    BtnFixCent     ->Left=370;
-    BtnFixHoriz    ->Left=390;
-    BtnFixVert     ->Left=410;
-    BtnShowSkyplot ->Left=430;
-    BtnShowMap     ->Left=450;
-    BtnShowPoint   ->Left=470;
-    BtnAnimate     ->Left=490;
-    TimeScroll     ->Left=510;
-    BtnGE          ->Left=530;
-    BtnGM          ->Left=550;
-#endif
     MenuMapImg     ->Enabled=MapImage->Height>0;
     MenuSkyImg     ->Enabled=SkyImageI->Height>0;
     MenuSrcSol     ->Enabled=SolFiles[sel]->Count>0;
@@ -2166,9 +2432,10 @@ void __fastcall TPlot::UpdateEnable(void)
     MenuFixCent    ->Enabled=BtnFixCent  ->Enabled;
     MenuFixHoriz   ->Enabled=BtnFixHoriz ->Enabled;
     MenuFixVert    ->Enabled=BtnFixVert  ->Enabled;
-    MenuShowPoint  ->Enabled=BtnShowPoint->Enabled;
     MenuShowMap    ->Enabled=BtnShowMap  ->Enabled;
+    MenuShowImg    ->Enabled=BtnShowImg  ->Enabled;
     MenuShowSkyplot->Enabled=BtnShowSkyplot->Visible;
+    MenuShowGrid   ->Enabled=BtnShowGrid ->Visible;
     MenuGE         ->Enabled=BtnGE       ->Enabled;
     MenuGM         ->Enabled=BtnGM       ->Enabled;
     
@@ -2176,9 +2443,10 @@ void __fastcall TPlot::UpdateEnable(void)
     MenuFixCent    ->Checked=BtnFixCent  ->Down;
     MenuFixHoriz   ->Checked=BtnFixHoriz ->Down;
     MenuFixVert    ->Checked=BtnFixVert  ->Down;
-    MenuShowPoint  ->Checked=BtnShowPoint->Down;
     MenuShowSkyplot->Checked=BtnShowSkyplot->Down;
+    MenuShowGrid   ->Checked=BtnShowGrid ->Down;
     MenuShowMap    ->Checked=BtnShowMap  ->Down;
+    MenuShowImg    ->Checked=BtnShowImg  ->Down;
     
     MenuAnimStart  ->Enabled=!ConnectState&&BtnAnimate->Enabled&&!BtnAnimate->Down;
     MenuAnimStop   ->Enabled=!ConnectState&&BtnAnimate->Enabled&& BtnAnimate->Down;
@@ -2285,13 +2553,11 @@ void __fastcall TPlot::SetRange(int all, double range)
         GraphT->SetLim(xl,yl);
         GraphT->GetScale(xs,ys);
         GraphT->SetScale(MAX(xs,ys),MAX(xs,ys));
-#if 1
         if (norm(OPos,3)>0.0) {
             ecef2pos(OPos,pos);
             GoogleEarthView->SetView(pos[0]*R2D,pos[1]*R2D,0.0,0.0);
             GoogleMapView->SetView(pos[0]*R2D,pos[1]*R2D,13);
         }
-#endif
     }
     if (PLOT_SOLP<=PlotType&&PlotType<=PLOT_SOLA) {
         GraphG[0]->GetLim(tl,xp);
@@ -2432,6 +2698,20 @@ void __fastcall TPlot::FitRange(int all)
         }
     }
 }
+// set center of track plot -------------------------------------------------
+void __fastcall TPlot::SetTrkCent(double lat, double lon)
+{
+    gtime_t time={0};
+    double pos[3]={0},rr[3],xyz[3];
+    
+    if (PlotType!=PLOT_TRK) return;
+    pos[0]=lat*D2R;
+    pos[1]=lon*D2R;
+    pos2ecef(pos,rr);
+    PosToXyz(time,rr,0,xyz);
+    GraphT->SetCent(xyz[0],xyz[1]);
+    UpdatePlot();
+}
 // load options from ini-file -----------------------------------------------
 void __fastcall TPlot::LoadOpt(void)
 {
@@ -2449,23 +2729,25 @@ void __fastcall TPlot::LoadOpt(void)
     AutoScale    =ini->ReadInteger("plot","autoscale",     1);
     ShowStats    =ini->ReadInteger("plot","showstats",     0);
     ShowLabel    =ini->ReadInteger("plot","showlabel",     1);
-    ShowGLabel   =ini->ReadInteger("plot","showglabel",    1);
+    ShowGLabel   =ini->ReadInteger("plot","showglabel",    2);
     ShowCompass  =ini->ReadInteger("plot","showcompass",   0);
     ShowScale    =ini->ReadInteger("plot","showscale",     1);
     ShowArrow    =ini->ReadInteger("plot","showarrow",     0);
-    ShowSlip     =ini->ReadInteger("plot","showslip",      0);
-    ShowHalfC    =ini->ReadInteger("plot","showhalfc",     0);
+    ShowSlip     =ini->ReadInteger("plot","showslip",      2);
+    ShowHalfC    =ini->ReadInteger("plot","showhalfc",     1);
     ShowErr      =ini->ReadInteger("plot","showerr",       0);
     ShowEph      =ini->ReadInteger("plot","showeph",       0);
     PlotStyle    =ini->ReadInteger("plot","plotstyle",     0);
     MarkSize     =ini->ReadInteger("plot","marksize",      2);
-    NavSys       =ini->ReadInteger("plot","navsys",  SYS_GPS);
+    NavSys       =ini->ReadInteger("plot","navsys",  SYS_GPS|SYS_GLO|SYS_SBS|SYS_GAL);
     AnimCycle    =ini->ReadInteger("plot","animcycle",    10);
     RefCycle     =ini->ReadInteger("plot","refcycle",    100);
     HideLowSat   =ini->ReadInteger("plot","hidelowsat",    0);
     ElMaskP      =ini->ReadInteger("plot","elmaskp",       0);
     ExSats       =ini->ReadString ("plot","exsats",       "");
     RtBuffSize   =ini->ReadInteger("plot","rtbuffsize",10800);
+    TimeSyncOut  =ini->ReadInteger("plot","timesyncout",   0);
+    TimeSyncPort =ini->ReadInteger("plot","timesyncport",10071);
     RtStream[0]  =ini->ReadInteger("plot","rtstream1",     0);
     RtStream[1]  =ini->ReadInteger("plot","rtstream2",     0);
     RtFormat[0]  =ini->ReadInteger("plot","rtformat1",     0);
@@ -2512,11 +2794,11 @@ void __fastcall TPlot::LoadOpt(void)
     RefDialog->StaPosFile=ini->ReadString ("plot","staposfile","");
     RefDialog->Format    =ini->ReadInteger("plot","staposformat",0);
     
-    ElMask    =ini->ReadFloat  ("plot","elmask", 0.0);
+    ElMask    =ini->ReadFloat  ("plot","elmask", 15.0);
     MaxDop    =ini->ReadFloat  ("plot","maxdop",30.0);
     MaxMP     =ini->ReadFloat  ("plot","maxmp" ,10.0);
     YRange    =ini->ReadFloat  ("plot","yrange", 5.0);
-    Origin    =ini->ReadInteger("plot","orgin",    2);
+    Origin    =ini->ReadInteger("plot","orgin",    4);
     RcvPos    =ini->ReadInteger("plot","rcvpos",   0);
     OOPos[0]  =ini->ReadFloat  ("plot","oopos1",   0);
     OOPos[1]  =ini->ReadFloat  ("plot","oopos2",   0);
@@ -2530,6 +2812,7 @@ void __fastcall TPlot::LoadOpt(void)
     Font->Size=ini->ReadInteger("plot","fontsize",8);
     
     RnxOpts   =ini->ReadString ("plot","rnxopts","");
+    ApiKey    =ini->ReadString ("plot","apikey" ,"");
     
     for (i=0;i<11;i++) {
         geopts[i]=ini->ReadInteger("ge",s.sprintf("geopts_%d",i),0);
@@ -2556,7 +2839,10 @@ void __fastcall TPlot::LoadOpt(void)
     TTextViewer::FontD->Name=ini->ReadString ("viewer","fontname","Courier New");
     TTextViewer::FontD->Size=ini->ReadInteger("viewer","fontsize",9);
     
-    FileSelDialog->Dir=ini->ReadString("solbrows","dir","");
+    MenuBrowse->Checked=ini->ReadInteger("solbrows","show",       0);
+    PanelBrowse->Width =ini->ReadInteger("solbrows","split1",   100);
+    DirSel->Height     =ini->ReadInteger("solbrows","split2",   150);
+    DirSel->Directory  =ini->ReadString ("solbrows","dir",  "C:\\");
     
     delete ini;
     
@@ -2601,6 +2887,8 @@ void __fastcall TPlot::SaveOpt(void)
     ini->WriteInteger("plot","elmaskp",      ElMaskP      );
     ini->WriteString ("plot","exsats",       ExSats       );
     ini->WriteInteger("plot","rtbuffsize",   RtBuffSize   );
+    ini->WriteInteger("plot","timesyncout",  TimeSyncOut  );
+    ini->WriteInteger("plot","timesyncport", TimeSyncPort );
     ini->WriteInteger("plot","rtstream1",    RtStream[0]  );
     ini->WriteInteger("plot","rtstream2",    RtStream[1]  );
     ini->WriteInteger("plot","rtformat1",    RtFormat[0]  );
@@ -2664,6 +2952,7 @@ void __fastcall TPlot::SaveOpt(void)
     ini->WriteInteger("plot","fontsize",     Font->Size    );
     
     ini->WriteString ("plot","rnxopts",      RnxOpts       );
+    ini->WriteString ("plot","apikey",       ApiKey        );
     
     GoogleEarthView->GetOpts(geopts);
     for (i=0;i<11;i++) {
@@ -2688,111 +2977,45 @@ void __fastcall TPlot::SaveOpt(void)
     ini->WriteString ("viewer","fontname",TTextViewer::FontD->Name);
     ini->WriteInteger("viewer","fontsize",TTextViewer::FontD->Size);
     
-    ini->WriteString ("solbrows","dir",FileSelDialog->Dir);
+    ini->WriteInteger("solbrows","show", MenuBrowse->Checked);
+    ini->WriteInteger("solbrows","split1",PanelBrowse->Width);
+    ini->WriteInteger("solbrows","split2",    DirSel->Height);
+    ini->WriteString ("solbrows","dir",    DirSel->Directory);
     
     delete ini;
 }
 //---------------------------------------------------------------------------
 
-void __fastcall TPlot::MenuPlotGEClick(TObject *Sender)
+void __fastcall TPlot::FileMaskChange(TObject *Sender)
 {
-    TRect rect;
-    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
-	Top=rect.Top;
-	Left=rect.Left;
-	Width=rect.Width()/2;
-	Height=rect.Height();
-    GoogleEarthView->Top=Top;
-    GoogleEarthView->Left=Width;
-    GoogleEarthView->Width=Width;
-    GoogleEarthView->Height=Height;
-    GoogleMapView->Hide();
-    GoogleEarthView->Show();
+	switch (FileMask->ItemIndex) {
+		case 0 : FileList->Mask="*.pos" ; break;
+		case 1 : FileList->Mask="*.nmea"; break;
+		case 2 : FileList->Mask="*.stat"; break;
+		default: FileList->Mask="*.*"   ; break;
+	}
 }
 //---------------------------------------------------------------------------
 
-void __fastcall TPlot::MenuPlotGMClick(TObject *Sender)
+void __fastcall TPlot::FileListClick(TObject *Sender)
 {
-    TRect rect;
-    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
-	Top=rect.Top;
-	Left=rect.Left;
-	Width=rect.Width()/2;
-	Height=rect.Height();
-    GoogleMapView->Top=Top;
-    GoogleMapView->Left=Width;
-    GoogleMapView->Width=Width;
-    GoogleMapView->Height=Height;
-    GoogleEarthView->Hide();
-    GoogleMapView->Show();
+	TStringList *file=new TStringList;
+	file->Add(FileList->FileName);
+	Plot->ReadSol(file,0);
+	delete file;
 }
 //---------------------------------------------------------------------------
 
-void __fastcall TPlot::MenuPlotGEGMClick(TObject *Sender)
+void __fastcall TPlot::Splitter1Moved(TObject *Sender)
 {
-    TRect rect;
-    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
-	Top=rect.Top;
-	Left=rect.Left;
-	Width=rect.Width()/2;
-	Height=rect.Height();
-    GoogleEarthView->Top=Top;
-    GoogleEarthView->Left=Width;
-    GoogleEarthView->Width=Width;
-    GoogleEarthView->Height=Height/2;
-    GoogleMapView->Top=Top+Height/2;
-    GoogleMapView->Left=Width;
-    GoogleMapView->Width=Width;
-    GoogleMapView->Height=Height/2;
-    GoogleEarthView->Show();
-    GoogleMapView->Show();
+    UpdateSize();
+    Refresh();
 }
 //---------------------------------------------------------------------------
 
-void __fastcall TPlot::MenuMaxClick(TObject *Sender)
+void __fastcall TPlot::BtnUdListClick(TObject *Sender)
 {
-    TRect rect;
-    ::SystemParametersInfo(SPI_GETWORKAREA,0,&rect,0);
-	Top=rect.Top;
-	Left=rect.Left;
-	Width=rect.Width();
-	Height=rect.Height();
-    GoogleEarthView->Hide();
-    GoogleMapView->Hide();
+    FileList->Update();
 }
 //---------------------------------------------------------------------------
-
-void __fastcall TPlot::DispGesture(TObject *Sender, const TGestureEventInfo &EventInfo,
-          bool &Handled)
-{
-#if 0
-    AnsiString s;
-    int b,e;
-    
-    b=EventInfo.Flags.Contains(gfBegin);
-    e=EventInfo.Flags.Contains(gfEnd);
-    
-	if (EventInfo.GestureID==Controls::igiZoom) {
-        s.sprintf("zoom: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
-                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
-                  EventInfo.Angle,EventInfo.Distance);
-        Message1->Caption=s;
-    }
-	else if (EventInfo.GestureID==Controls::igiPan) {
-        s.sprintf("pan: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
-                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
-                  EventInfo.Angle,EventInfo.Distance);
-        Message1->Caption=s;
-    }
-	else if (EventInfo.GestureID==Controls::igiRotate) {
-        s.sprintf("rotate: Location=%d,%d,Flag=%d,%d,Angle=%.1f,Disnance=%d",
-                  EventInfo.Location.X,EventInfo.Location.Y,b,e,
-                  EventInfo.Angle,EventInfo.Distance);
-        Message1->Caption=s;
-    }
-#endif
-}
-//---------------------------------------------------------------------------
-
-
 

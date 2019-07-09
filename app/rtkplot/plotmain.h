@@ -18,6 +18,7 @@
 #include <ExtDlgs.hpp>
 #include "SHDocVw_OCX.h"
 #include <Vcl.OleCtrls.hpp>
+#include <Vcl.FileCtrl.hpp>
 
 #define MAXNFILE    256                 // max number of solution files
 #define MAXSTRBUFF  1024                // max length of stream buffer
@@ -71,7 +72,7 @@
 #define QCERRFILE   "rtkplot_qc.err"    // error file for qc
 
 #define SQR(x)      ((x)*(x))
-#define SQRT(x)     ((x)<0.0?0.0:sqrt(x))
+#define SQRT(x)     ((x)<0.0||(x)!=(x)?0.0:sqrt(x))
 #define MAX(x,y)    ((x)>(y)?(x):(y))
 #define MIN(x,y)    ((x)<(y)?(x):(y))
 
@@ -129,8 +130,8 @@ __published:
 	TSpeedButton *BtnFixVert;
 	TSpeedButton *BtnShowTrack;
 	TSpeedButton *BtnShowSkyplot;
+	TSpeedButton *BtnShowImg;
 	TSpeedButton *BtnShowMap;
-	TSpeedButton *BtnShowPoint;
 	TSpeedButton *BtnAnimate;
 	TSpeedButton *BtnClear;
 	TSpeedButton *BtnReload;
@@ -184,8 +185,8 @@ __published:
 	TMenuItem *MenuShowTrack;
 	TMenuItem *MenuFixHoriz;
 	TMenuItem *MenuFixVert;
+	TMenuItem *MenuShowImg;
 	TMenuItem *MenuShowMap;
-	TMenuItem *MenuShowPoint;
 	TMenuItem *MenuAnimStart;
 	TMenuItem *MenuAnimStop;
 	
@@ -212,8 +213,6 @@ __published:
 	TOpenDialog *OpenElMaskDialog;
 	TOpenDialog *OpenMapPathDialog;
 	TOpenDialog *OpenMapDialog;
-	TMenuItem *MenuFileSel;
-	TMenuItem *N4;
 	TMenuItem *N14;
 	TMenuItem *MenuSaveDop;
 	TSaveDialog *SaveDialog;
@@ -253,6 +252,19 @@ __published:
 	TOpenDialog *OpenWaypointDialog;
 	TSaveDialog *SaveWaypointDialog;
 	TPanel *Panel3;
+	TPanel *PanelBrowse;
+	TSplitter *Splitter1;
+	TDriveComboBox *DriveSel;
+	TDirectoryListBox *DirSel;
+	TSplitter *Splitter2;
+	TFileListBox *FileList;
+	TComboBox *FileMask;
+	TMenuItem *MenuBrowse;
+	TPanel *StrStatus;
+	TSpeedButton *BtnShowGrid;
+	TMenuItem *MenuShowGrid;
+	TPanel *Panel4;
+	TSpeedButton *BtnUdList;
 	
 	void __fastcall FormCreate			(TObject *Sender);
 	void __fastcall FormShow			(TObject *Sender);
@@ -293,8 +305,8 @@ __published:
 	void __fastcall MenuShowTrackClick	(TObject *Sender);
 	void __fastcall MenuFixHorizClick	(TObject *Sender);
 	void __fastcall MenuFixVertClick	(TObject *Sender);
+	void __fastcall MenuShowImgClick	(TObject *Sender);
 	void __fastcall MenuShowMapClick	(TObject *Sender);
-	void __fastcall MenuShowPointClick	(TObject *Sender);
 	void __fastcall MenuAnimStartClick	(TObject *Sender);
 	void __fastcall MenuAnimStopClick	(TObject *Sender);
 	void __fastcall MenuAboutClick		(TObject *Sender);
@@ -305,7 +317,7 @@ __published:
 	void __fastcall BtnSol12Click		(TObject *Sender);
 	void __fastcall BtnSol1DblClick		(TObject *Sender);
 	void __fastcall BtnSol2DblClick		(TObject *Sender);
-	void __fastcall BtnShowMapClick		(TObject *Sender);
+	void __fastcall BtnShowImgClick		(TObject *Sender);
 	void __fastcall BtnOn1Click			(TObject *Sender);
 	void __fastcall BtnOn2Click			(TObject *Sender);
 	void __fastcall BtnOn3Click			(TObject *Sender);
@@ -317,7 +329,7 @@ __published:
 	void __fastcall BtnShowTrackClick	(TObject *Sender);
 	void __fastcall BtnFixHorizClick	(TObject *Sender);
 	void __fastcall BtnFixVertClick		(TObject *Sender);
-	void __fastcall BtnShowPointClick	(TObject *Sender);
+	void __fastcall BtnShowMapClick	(TObject *Sender);
 	void __fastcall BtnAnimateClick		(TObject *Sender);
 	void __fastcall BtnClearClick		(TObject *Sender);
 	void __fastcall BtnReloadClick		(TObject *Sender);
@@ -342,7 +354,6 @@ __published:
 	void __fastcall MouseWheel			(TObject *Sender, TShiftState Shift,
 										 int WheelDelta, TPoint &MousePos, bool &Handled);
 	void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
-	void __fastcall MenuFileSelClick(TObject *Sender);
 	void __fastcall MenuSaveDopClick(TObject *Sender);
 	void __fastcall MenuSaveImageClick(TObject *Sender);
 	void __fastcall MenuGEClick(TObject *Sender);
@@ -369,6 +380,14 @@ __published:
 	void __fastcall BtnMessage2Click(TObject *Sender);
 	void __fastcall MenuOpenWaypointClick(TObject *Sender);
 	void __fastcall MenuSaveWaypointClick(TObject *Sender);
+	void __fastcall DispDblClick(TObject *Sender);
+	void __fastcall FileMaskChange(TObject *Sender);
+	void __fastcall FileListClick(TObject *Sender);
+	void __fastcall Splitter1Moved(TObject *Sender);
+	void __fastcall MenuBrowseClick(TObject *Sender);
+	void __fastcall MenuShowGridClick(TObject *Sender);
+	void __fastcall BtnShowGridClick(TObject *Sender);
+	void __fastcall BtnUdListClick(TObject *Sender);
 
 
 protected:
@@ -390,6 +409,7 @@ private:
     TConsole *Console1,*Console2;
     
     stream_t Stream[2];
+    stream_t StrTimeSync;
     solbuf_t SolData[2];
     solstatbuf_t SolStat[2];
     int SolIndex[2];
@@ -397,6 +417,8 @@ private:
     nav_t Nav;
     sta_t Sta;
     double *Az,*El,*Mp[NFREQ+NEXOBS];
+    char StrBuff[1024];
+    int NStrBuff;
     
     gtime_t OEpoch;
     int FormWidth,FormHeight;
@@ -410,6 +432,7 @@ private:
     
     int Drag,Xn,Yn;
     double X0,Y0,Xc,Yc,Xs,Ys,Xcent,Xcent0;
+    unsigned int MouseDownTick;
     
     int GEState,GEDataState[2];
     double GEHeading;
@@ -469,6 +492,8 @@ private:
     void __fastcall MouseMoveSol (int X, int Y, double dx, double dy, double dxs, double dys);
     void __fastcall MouseMoveObs (int X, int Y, double dx, double dy, double dxs, double dys);
 
+    int  __fastcall CheckObsTypeForMatch(const obsd_t *obs, int i);
+    int  __fastcall CheckObsType2ForMatch(const obsd_t *obs, int i);
     void __fastcall DrawTrk      (int level);
     void __fastcall DrawTrkImage (int level);
     void __fastcall DrawTrkMap   (int level);
@@ -540,6 +565,7 @@ public:
     AnsiString MapImageFile;
     AnsiString SkyImageFile;
     AnsiString RnxOpts;
+    AnsiString ApiKey;
     tle_t TLEData;
     gis_t Gis;
     
@@ -597,6 +623,8 @@ public:
     int AutoScale;
     double YRange;
     int RtBuffSize;
+    int TimeSyncOut;
+    int TimeSyncPort;
     int Origin;
     int RcvPos;
     double OOPos[3];
@@ -635,6 +663,7 @@ public:
     void __fastcall ReadElMaskData(AnsiString file);
     int __fastcall GetCurrentPos(double *rr);
     int __fastcall GetCenterPos(double *rr);
+    void __fastcall SetTrkCent(double lat, double lon);
     void __fastcall UpdatePlot(void);
     void __fastcall Refresh_GEView(void);
 	void __fastcall Refresh_GMView(void);

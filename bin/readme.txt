@@ -1,7 +1,7 @@
-# 
+#
 # RTKLIB/bin
 #
 
-The contents of RTKLIB/bin have been moved to RTKLIB_bin/bin.
+Recent demo5 binaries are available at:
 
-
+http://rtkexplorer.com/downloads/rtklib-code/

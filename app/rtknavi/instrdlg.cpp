@@ -59,8 +59,16 @@ void __fastcall TInputStrDialog::FormShow(TObject *Sender)
 	TimeTagC  ->Checked  =TimeTag;
 	TimeSpeedL->Text     =TimeSpeed;
 	TimeStartE->Text     =TimeStart;
+		if (Time64Bit) {
+		  Time64BitL   ->ItemIndex=1;
+		} else {
+		  Time64BitL   ->ItemIndex=0;
+		}
 	NmeaPos1  ->Text     =s.sprintf("%.9f",NmeaPos[0]);
 	NmeaPos2  ->Text     =s.sprintf("%.9f",NmeaPos[1]);
+	NmeaPos3  ->Text     =s.sprintf("%.3f",NmeaPos[2]);
+	EditMaxBL ->Text     =s.sprintf("%.0f",MaxBL);
+	EditResetCmd->Text   =ResetCmd;
 	UpdateEnable();
 }
 //---------------------------------------------------------------------------
@@ -82,8 +90,12 @@ void __fastcall TInputStrDialog::BtnOkClick(TObject *Sender)
 	TimeTag    =TimeTagC  ->Checked;
 	TimeSpeed  =TimeSpeedL->Text;
 	TimeStart  =TimeStartE->Text;
+    Time64Bit  =Time64BitL->ItemIndex;
 	NmeaPos[0] =str2dbl(NmeaPos1->Text);
 	NmeaPos[1] =str2dbl(NmeaPos2->Text);
+	NmeaPos[2] =str2dbl(NmeaPos3->Text);
+	MaxBL      =str2dbl(EditMaxBL->Text);
+	ResetCmd   =EditResetCmd->Text;
 }
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::StreamC1Click(TObject *Sender)
@@ -140,6 +152,7 @@ AnsiString __fastcall TInputStrDialog::SetFilePath(AnsiString path)
 	if (TimeTagC->Checked     ) path+="::T";
 	if (TimeStartE->Text!="0" ) path+="::+"+TimeStartE->Text;
 	path+="::"+TimeSpeedL->Text;
+    if (Time64Bit) { path+="::P=8"; } else { path+="::P=4"; };
 	return path;
 }
 //---------------------------------------------------------------------------
@@ -179,88 +192,76 @@ void __fastcall TInputStrDialog::BtnStr3Click(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::BtnCmd1Click(TObject *Sender)
 {
-	if (Stream1->ItemIndex==0) {
-		CmdOptDialog->Cmds  [0]=Cmds  [0][0];
-		CmdOptDialog->Cmds  [1]=Cmds  [0][1];
-		CmdOptDialog->CmdEna[0]=CmdEna[0][0];
-		CmdOptDialog->CmdEna[1]=CmdEna[0][1];
-	}
-	else {
-		CmdOptDialog->Cmds  [0]=CmdsTcp  [0][0];
-		CmdOptDialog->Cmds  [1]=CmdsTcp  [0][1];
-		CmdOptDialog->CmdEna[0]=CmdEnaTcp[0][0];
-		CmdOptDialog->CmdEna[1]=CmdEnaTcp[0][1];
+	for (int i=0;i<3;i++) {
+		if (Stream1->ItemIndex==0) {
+			CmdOptDialog->Cmds  [i]=Cmds  [0][i];
+			CmdOptDialog->CmdEna[i]=CmdEna[0][i];
+		}
+		else {
+			CmdOptDialog->Cmds  [i]=CmdsTcp  [0][i];
+			CmdOptDialog->CmdEna[i]=CmdEnaTcp[0][i];
+		}
 	}
 	if (CmdOptDialog->ShowModal()!=mrOk) return;
-	if (Stream1->ItemIndex==0) {
-		Cmds  [0][0]=CmdOptDialog->Cmds  [0];
-		Cmds  [0][1]=CmdOptDialog->Cmds  [1];
-		CmdEna[0][0]=CmdOptDialog->CmdEna[0];
-		CmdEna[0][1]=CmdOptDialog->CmdEna[1];
-	}
-	else {
-		CmdsTcp  [0][0]=CmdOptDialog->Cmds  [0];
-		CmdsTcp  [0][1]=CmdOptDialog->Cmds  [1];
-		CmdEnaTcp[0][0]=CmdOptDialog->CmdEna[0];
-		CmdEnaTcp[0][1]=CmdOptDialog->CmdEna[1];
+	for (int i=0;i<3;i++) {
+		if (Stream1->ItemIndex==0) {
+			Cmds  [0][i]=CmdOptDialog->Cmds  [i];
+			CmdEna[0][i]=CmdOptDialog->CmdEna[i];
+		}
+		else {
+			CmdsTcp  [0][i]=CmdOptDialog->Cmds  [i];
+			CmdEnaTcp[0][i]=CmdOptDialog->CmdEna[i];
+		}
 	}
 }
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::BtnCmd2Click(TObject *Sender)
 {
-	if (Stream2->ItemIndex==0) {
-		CmdOptDialog->Cmds  [0]=Cmds  [1][0];
-		CmdOptDialog->Cmds  [1]=Cmds  [1][1];
-		CmdOptDialog->CmdEna[0]=CmdEna[1][0];
-		CmdOptDialog->CmdEna[1]=CmdEna[1][1];
-	}
-	else {
-		CmdOptDialog->Cmds  [0]=CmdsTcp  [1][0];
-		CmdOptDialog->Cmds  [1]=CmdsTcp  [1][1];
-		CmdOptDialog->CmdEna[0]=CmdEnaTcp[1][0];
-		CmdOptDialog->CmdEna[1]=CmdEnaTcp[1][1];
+	for (int i=0;i<3;i++) {
+		if (Stream2->ItemIndex==0) {
+			CmdOptDialog->Cmds  [i]=Cmds  [1][i];
+			CmdOptDialog->CmdEna[i]=CmdEna[1][i];
+		}
+		else {
+			CmdOptDialog->Cmds  [i]=CmdsTcp  [1][i];
+			CmdOptDialog->CmdEna[i]=CmdEnaTcp[1][i];
+		}
 	}
 	if (CmdOptDialog->ShowModal()!=mrOk) return;
-	if (Stream2->ItemIndex==0) {
-		Cmds  [1][0]=CmdOptDialog->Cmds  [0];
-		Cmds  [1][1]=CmdOptDialog->Cmds  [1];
-		CmdEna[1][0]=CmdOptDialog->CmdEna[0];
-		CmdEna[1][1]=CmdOptDialog->CmdEna[1];
-	}
-	else {
-		CmdsTcp  [1][0]=CmdOptDialog->Cmds  [0];
-		CmdsTcp  [1][1]=CmdOptDialog->Cmds  [1];
-		CmdEnaTcp[1][0]=CmdOptDialog->CmdEna[0];
-		CmdEnaTcp[1][1]=CmdOptDialog->CmdEna[1];
+	for (int i=0;i<3;i++) {
+		if (Stream2->ItemIndex==0) {
+			Cmds  [1][i]=CmdOptDialog->Cmds  [i];
+			CmdEna[1][i]=CmdOptDialog->CmdEna[i];
+		}
+		else {
+			CmdsTcp  [1][i]=CmdOptDialog->Cmds  [i];
+			CmdEnaTcp[1][i]=CmdOptDialog->CmdEna[i];
+		}
 	}
 }
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::BtnCmd3Click(TObject *Sender)
 {
-	if (Stream3->ItemIndex==0) {
-		CmdOptDialog->Cmds  [0]=Cmds  [2][0];
-		CmdOptDialog->Cmds  [1]=Cmds  [2][1];
-		CmdOptDialog->CmdEna[0]=CmdEna[2][0];
-		CmdOptDialog->CmdEna[1]=CmdEna[2][1];
-	}
-	else {
-		CmdOptDialog->Cmds  [0]=CmdsTcp  [2][0];
-		CmdOptDialog->Cmds  [1]=CmdsTcp  [2][1];
-		CmdOptDialog->CmdEna[0]=CmdEnaTcp[2][0];
-		CmdOptDialog->CmdEna[1]=CmdEnaTcp[2][1];
+	for (int i=0;i<3;i++) {
+		if (Stream3->ItemIndex==0) {
+			CmdOptDialog->Cmds  [i]=Cmds  [2][i];
+			CmdOptDialog->CmdEna[i]=CmdEna[2][i];
+		}
+		else {
+			CmdOptDialog->Cmds  [i]=CmdsTcp  [2][i];
+			CmdOptDialog->CmdEna[i]=CmdEnaTcp[2][i];
+		}
 	}
 	if (CmdOptDialog->ShowModal()!=mrOk) return;
-	if (Stream3->ItemIndex==0) {
-		Cmds  [2][0]=CmdOptDialog->Cmds  [0];
-		Cmds  [2][1]=CmdOptDialog->Cmds  [1];
-		CmdEna[2][0]=CmdOptDialog->CmdEna[0];
-		CmdEna[2][1]=CmdOptDialog->CmdEna[1];
-	}
-	else {
-		CmdsTcp  [2][0]=CmdOptDialog->Cmds  [0];
-		CmdsTcp  [2][1]=CmdOptDialog->Cmds  [1];
-		CmdEnaTcp[2][0]=CmdOptDialog->CmdEna[0];
-		CmdEnaTcp[2][1]=CmdOptDialog->CmdEna[1];
+	for (int i=0;i<3;i++) {
+		if (Stream3->ItemIndex==0) {
+			Cmds  [2][i]=CmdOptDialog->Cmds  [i];
+			CmdEna[2][i]=CmdOptDialog->CmdEna[i];
+		}
+		else {
+			CmdsTcp  [2][i]=CmdOptDialog->Cmds  [i];
+			CmdEnaTcp[2][i]=CmdOptDialog->CmdEna[i];
+		}
 	}
 }
 //---------------------------------------------------------------------------
@@ -290,10 +291,12 @@ void __fastcall TInputStrDialog::BtnPosClick(TObject *Sender)
 	AnsiString s;
 	RefDialog->RovPos[0]=str2dbl(NmeaPos1->Text);
 	RefDialog->RovPos[1]=str2dbl(NmeaPos2->Text);
+	RefDialog->RovPos[2]=str2dbl(NmeaPos3->Text);
 	RefDialog->StaPosFile=MainForm->StaPosFileF;
 	if (RefDialog->ShowModal()!=mrOk) return;
 	NmeaPos1->Text=s.sprintf("%.9f",RefDialog->Pos[0]);
 	NmeaPos2->Text=s.sprintf("%.9f",RefDialog->Pos[1]);
+	NmeaPos3->Text=s.sprintf("%.3f",RefDialog->Pos[2]);
 }
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::SerialOpt(int index, int opt)
@@ -351,9 +354,9 @@ void __fastcall TInputStrDialog::FtpOpt(int index, int opt)
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::UpdateEnable(void)
 {
-	int ena1=StreamC1->Checked&&Stream1->ItemIndex==4||
-             StreamC2->Checked&&Stream2->ItemIndex==4||
-             StreamC3->Checked&&Stream3->ItemIndex==4;
+	int ena1=(StreamC1->Checked&&Stream1->ItemIndex==4)||
+             (StreamC2->Checked&&Stream2->ItemIndex==4)||
+             (StreamC3->Checked&&Stream3->ItemIndex==4);
 	int ena2=StreamC2->Checked&&Stream2->ItemIndex<=3;
 	
 	Stream1   ->Enabled=StreamC1->Checked;
@@ -376,7 +379,13 @@ void __fastcall TInputStrDialog::UpdateEnable(void)
 	NmeaReqL  ->Enabled=ena2;
 	NmeaPos1  ->Enabled=ena2&&NmeaReqL->ItemIndex==1;
 	NmeaPos2  ->Enabled=ena2&&NmeaReqL->ItemIndex==1;
+	NmeaPos3  ->Enabled=ena2&&NmeaReqL->ItemIndex==1;
 	BtnPos    ->Enabled=ena2&&NmeaReqL->ItemIndex==1;
+	LabelResetCmd->Enabled=ena2&&NmeaReqL->ItemIndex==3;
+	EditResetCmd->Enabled=ena2&&NmeaReqL->ItemIndex==3;
+	LabelMaxBL->Enabled=ena2&&NmeaReqL->ItemIndex==3;
+	EditMaxBL ->Enabled=ena2&&NmeaReqL->ItemIndex==3;
+	LabelKm   ->Enabled=ena2&&NmeaReqL->ItemIndex==3;
 	
 	LabelF1   ->Enabled=ena1;
 	FilePath1 ->Enabled=StreamC1->Checked&&Stream1->ItemIndex==4;
@@ -388,6 +397,7 @@ void __fastcall TInputStrDialog::UpdateEnable(void)
 	TimeTagC  ->Enabled=ena1;
 	TimeStartE->Enabled=ena1&&TimeTagC->Checked;
 	TimeSpeedL->Enabled=ena1&&TimeTagC->Checked;
+    Time64BitL->Enabled=ena1&&TimeTagC->Checked;
 	LabelF2   ->Enabled=ena1&&TimeTagC->Checked;
 	LabelF3   ->Enabled=ena1&&TimeTagC->Checked;
 }

@@ -3,9 +3,9 @@ object ConvDialog: TConvDialog
   Top = 0
   BorderStyle = bsDialog
   Caption = 'Conversion Option'
-  ClientHeight = 109
+  ClientHeight = 111
   ClientWidth = 359
-  Color = clBtnFace
+  Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -38,20 +38,20 @@ object ConvDialog: TConvDialog
     Caption = 'Message Types  (Inteval: s) separeted by ,'
   end
   object BtnOk: TButton
-    Left = 176
-    Top = 83
+    Left = 177
+    Top = 80
     Width = 88
-    Height = 23
+    Height = 29
     Caption = '&OK'
     ModalResult = 1
     TabOrder = 1
     OnClick = BtnOkClick
   end
   object BtnCancel: TButton
-    Left = 264
-    Top = 83
+    Left = 265
+    Top = 80
     Width = 88
-    Height = 23
+    Height = 29
     Caption = '&Cancel'
     ModalResult = 2
     TabOrder = 0

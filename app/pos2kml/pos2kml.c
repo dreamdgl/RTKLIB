@@ -17,8 +17,6 @@
 #include <stdarg.h>
 #include "rtklib.h"
 
-static const char rcsid[]="$Id: pos2kml.c,v 1.1 2008/07/17 21:54:53 ttaka Exp $";
-
 /* help text -----------------------------------------------------------------*/
 static const char *help[]={
 "",
@@ -40,7 +38,7 @@ static const char *help[]={
 " -tu       output time stamp of utc [gpst]",
 " -i tint   output time interval (s) (0:all) [0]",
 " -q qflg   output q-flags (0:all) [0]",
-" -f n e h  add north/east/height offset to position (m) [0 0 0]"
+" -f n e h  add north/east/height offset to position (m) [0 0 0]",
 " -gpx      output GPX file"
 };
 /* print help ----------------------------------------------------------------*/

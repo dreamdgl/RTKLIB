@@ -209,31 +209,32 @@ void __fastcall TMainForm::FormClose(TObject *Sender, TCloseAction &Action)
 void __fastcall TMainForm::DropFiles(TWMDropFiles msg)
 {
     POINT point={0};
-    int top;
+    int top,y;
     char *p,file[1024];
     
     if (DragQueryFile((HDROP)msg.Drop,0xFFFFFFFF,NULL,0)<=0) return;
     DragQueryFile((HDROP)msg.Drop,0,file,sizeof(file));
     if (!DragQueryPoint((HDROP)msg.Drop,&point)) return;
     
+    y=point.y;
     top=Panel1->Top+Panel4->Top;
-    if (point.y<=top+InputFile1->Top+InputFile1->Height) {
+    if (y<=top+InputFile1->Top+InputFile1->Height) {
         InputFile1->Text=file;
         SetOutFile();
     }
-    else if (point.y<=top+InputFile2->Top+InputFile2->Height) {
+    else if (y<=top+InputFile2->Top+InputFile2->Height) {
         InputFile2->Text=file;
     }
-    else if (point.y<=top+InputFile3->Top+InputFile3->Height) {
+    else if (y<=top+InputFile3->Top+InputFile3->Height) {
         InputFile3->Text=file;
     }
-    else if (point.y<=top+InputFile4->Top+InputFile4->Height) {
+    else if (y<=top+InputFile4->Top+InputFile4->Height) {
         InputFile4->Text=file;
     }
-    else if (point.y<=top+InputFile5->Top+InputFile5->Height) {
+    else if (y<=top+InputFile5->Top+InputFile5->Height) {
         InputFile5->Text=file;
     }
-    else if (point.y<=top+InputFile6->Top+InputFile6->Height) {
+    else if (y<=top+InputFile6->Top+InputFile6->Height) {
         InputFile6->Text=file;
     }
 }
@@ -247,7 +248,7 @@ void __fastcall TMainForm::BtnPlotClick(TObject *Sender)
     opts+=" \""+file+"\"";
     
     if (!ExecCmd(cmd1+opts,1)&&!ExecCmd(cmd2+opts,1)) {
-        ShowMsg("error : rtkplot execution");
+        ShowMsg((char *)"error : rtkplot execution");
     }
 }
 // callback on button-view --------------------------------------------------
@@ -280,29 +281,29 @@ void __fastcall TMainForm::BtnExecClick(TObject *Sender)
     char *p;
     
     if (InputFile1->Text=="") {
-        showmsg("error : no rinex obs file (rover)");
+        showmsg((char *)"error : no rinex obs file (rover)");
         return;
     }
     if (InputFile2->Text==""&&PMODE_DGPS<=PosMode&&PosMode<=PMODE_FIXED) {
-        showmsg("error : no rinex obs file (base station)");
+        showmsg((char *)"error : no rinex obs file (base station)");
         return;
     }
     if (OutputFile->Text=="") {
-        showmsg("error : no output file");
+        showmsg((char *)"error : no output file");
         return;
     }
-    if (p=strrchr(OutputFile_Text.c_str(),'.')) {
+    if ((p=strrchr(OutputFile_Text.c_str(),'.'))) {
         if (!strcmp(p,".obs")||!strcmp(p,".OBS")||!strcmp(p,".nav")||
             !strcmp(p,".NAV")||!strcmp(p,".gnav")||!strcmp(p,".GNAV")||
             !strcmp(p,".gz")||!strcmp(p,".Z")||
             !strcmp(p+3,"o")||!strcmp(p+3,"O")||!strcmp(p+3,"d")||
             !strcmp(p+3,"D")||!strcmp(p+3,"n")||!strcmp(p+3,"N")||
             !strcmp(p+3,"g")||!strcmp(p+3,"G")) {
-            showmsg("error : invalid extension of output file (%s)",p);
+            showmsg((char *)"error : invalid extension of output file (%s)",p);
             return;
         }
     }
-    showmsg("");
+    showmsg((char *)"");
     BtnExec  ->Visible=false;
     BtnAbort ->Visible=true;
     AbortFlag=0;
@@ -324,7 +325,7 @@ void __fastcall TMainForm::BtnExecClick(TObject *Sender)
     }
     AnsiString Message_Caption=Message->Caption;
     if (strstr(Message_Caption.c_str(),"processing")) {
-        showmsg("done");
+        showmsg((char *)"done");
     }
     BtnAbort ->Visible=false;
     BtnExec  ->Visible=true;
@@ -340,7 +341,7 @@ void __fastcall TMainForm::BtnExecClick(TObject *Sender)
 void __fastcall TMainForm::BtnAbortClick(TObject *Sender)
 {
     AbortFlag=1;
-    showmsg("aborted");
+    showmsg((char *)"aborted");
 }
 // callback on button-exit --------------------------------------------------
 void __fastcall TMainForm::BtnExitClick(TObject *Sender)
@@ -351,6 +352,9 @@ void __fastcall TMainForm::BtnExitClick(TObject *Sender)
 void __fastcall TMainForm::BtnAboutClick(TObject *Sender)
 {
     AnsiString prog=PRGNAME;
+#ifdef _WIN64
+    prog+="_WIN64";
+#endif
 #ifdef MKL
     prog+="_MKL";
 #endif
@@ -525,7 +529,7 @@ void __fastcall TMainForm::BtnInputPlot1Click(TObject *Sender)
         files[4]+"\" \""+files[5]+"\"";
     
     if (!ExecCmd(cmd1+opts,1)&&!ExecCmd(cmd2+opts,1)) {
-        ShowMsg("error : rtkplot execution");
+        ShowMsg((char *)"error : rtkplot execution");
     }
 }
 // callback on button-inputplot-2 -------------------------------------------
@@ -555,7 +559,7 @@ void __fastcall TMainForm::BtnInputPlot2Click(TObject *Sender)
          files[4]+"\" \""+files[5]+"\"";
     
     if (!ExecCmd(cmd1+opts,1)&&!ExecCmd(cmd2+opts,1)) {
-        ShowMsg("error : rtkplot execution");
+        ShowMsg((char *)"error : rtkplot execution");
     }
 }
 // callback on button-output-directory --------------------------------------
@@ -595,7 +599,7 @@ void __fastcall TMainForm::TimeUnitFClick(TObject *Sender)
 }
 // callback on time-ymd-1 updown --------------------------------------------
 void __fastcall TMainForm::TimeY1UDChangingEx(TObject *Sender,
-      bool &AllowChange, short NewValue, TUpDownDirection Direction)
+      bool &AllowChange, int NewValue, TUpDownDirection Direction)
 {
     AnsiString TimeY1_Text=TimeY1->Text,s;
     double ep[]={2000,1,1,0,0,0};
@@ -614,7 +618,7 @@ void __fastcall TMainForm::TimeY1UDChangingEx(TObject *Sender,
 }
 // callback on time-hms-1 updown --------------------------------------------
 void __fastcall TMainForm::TimeH1UDChangingEx(TObject *Sender,
-      bool &AllowChange, short NewValue, TUpDownDirection Direction)
+      bool &AllowChange, int NewValue, TUpDownDirection Direction)
 {
     AnsiString TimeH1_Text=TimeH1->Text,s;
     int hms[3]={0},sec,p=TimeH1->SelStart,ud=Direction==updUp?1:-1;
@@ -628,7 +632,7 @@ void __fastcall TMainForm::TimeH1UDChangingEx(TObject *Sender,
 }
 // callback on time-ymd-2 updown --------------------------------------------
 void __fastcall TMainForm::TimeY2UDChangingEx(TObject *Sender,
-      bool &AllowChange, short NewValue, TUpDownDirection Direction)
+      bool &AllowChange, int NewValue, TUpDownDirection Direction)
 {
     AnsiString TimeY2_Text=TimeY2->Text,s;
     double ep[]={2000,1,1,0,0,0};
@@ -647,7 +651,7 @@ void __fastcall TMainForm::TimeY2UDChangingEx(TObject *Sender,
 }
 // callback on time-hms-2 updown --------------------------------------------
 void __fastcall TMainForm::TimeH2UDChangingEx(TObject *Sender,
-      bool &AllowChange, short NewValue, TUpDownDirection Direction)
+      bool &AllowChange, int NewValue, TUpDownDirection Direction)
 {
     AnsiString TimeH2_Text=TimeH2->Text,s;
     int hms[3]={0},sec,p=TimeH2->SelStart,ud=Direction==updUp?1:-1;
@@ -658,6 +662,46 @@ void __fastcall TMainForm::TimeH2UDChangingEx(TObject *Sender,
     if (sec<0) sec+=86400; else if (sec>=86400) sec-=86400;
     TimeH2->Text=s.sprintf("%02d:%02d:%02d",sec/3600,(sec%3600)/60,sec%60);
     TimeH2->SelStart=p>5||p==0?8:(p>2?5:2);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::TimeY1KeyDown(TObject *Sender, WORD &Key, TShiftState Shift)
+
+{
+    bool allowchange;
+    if (Key==VK_UP||Key==VK_DOWN) {
+        TimeY1UDChangingEx(Sender,allowchange,0,Key==VK_UP?updUp:updDown);
+        Key=0;
+    }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::TimeH1KeyDown(TObject *Sender, WORD &Key, TShiftState Shift)
+
+{
+    bool allowchange;
+    if (Key==VK_UP||Key==VK_DOWN) {
+        TimeH1UDChangingEx(Sender,allowchange,0,Key==VK_UP?updUp:updDown);
+        Key=0;
+    }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::TimeY2KeyDown(TObject *Sender, WORD &Key, TShiftState Shift)
+
+{
+    bool allowchange;
+    if (Key==VK_UP||Key==VK_DOWN) {
+        TimeY2UDChangingEx(Sender,allowchange,0,Key==VK_UP?updUp:updDown);
+        Key=0;
+    }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainForm::TimeH2KeyDown(TObject *Sender, WORD &Key, TShiftState Shift)
+
+{
+    bool allowchange;
+    if (Key==VK_UP||Key==VK_DOWN) {
+        TimeH2UDChangingEx(Sender,allowchange,0,Key==VK_UP?updUp:updDown);
+        Key=0;
+    }
 }
 // callback on inputfile-1 change -------------------------------------------
 void __fastcall TMainForm::InputFile1Change(TObject *Sender)
@@ -735,7 +779,7 @@ int __fastcall TMainForm::ExecProc(void)
         strcpy(infile[n++],InputFile3_Text.c_str());
     }
     else if (!ObsToNav(InputFile1_Text.c_str(),infile[n++])) {
-        showmsg("error: no navigation data");
+        showmsg((char *)"error: no navigation data");
         return 0;
     }
     if (InputFile4_Text!="") {
@@ -782,12 +826,12 @@ int __fastcall TMainForm::ExecProc(void)
         }
     }
     Progress->Position=0;
-    showmsg("reading...");
+    showmsg((char *)"reading...");
     
     // post processing positioning
     if ((stat=postpos(ts,te,ti,tu,&prcopt,&solopt,&filopt,infile,n,outfile,
                       rov,base))==1) {
-        showmsg("aborted");
+        showmsg((char *)"aborted");
     }
     delete [] rov ;
     delete [] base;
@@ -800,6 +844,7 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
 {
     char buff[1024],id[32],*p;
     int sat,ex;
+    int ppp=PosMode>=PMODE_PPP_KINEMA;
     
     // processing options
     prcopt.mode     =PosMode;
@@ -827,6 +872,11 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     prcopt.tidecorr =TideCorr;
     prcopt.armaxiter=ARIter;
     prcopt.niter    =NumIter;
+    prcopt.minfixsats=MinFixSats;
+    prcopt.minholdsats=MinHoldSats;
+    prcopt.mindropsats=MinDropSats;
+    prcopt.arfilter=ARFilter;
+    prcopt.rcvstds=RcvStds;
     prcopt.intpref  =IntpRefObs;
     prcopt.sbassatsel=SbasSat;
     prcopt.eratio[0]=MeasErrR1;
@@ -842,14 +892,19 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     prcopt.prn[4]   =PrNoise5;
     prcopt.sclkstab =SatClkStab;
     prcopt.thresar[0]=ValidThresAR;
-    prcopt.thresar[1]=ThresAR2;
-    prcopt.thresar[2]=ThresAR3;
+    prcopt.thresar[1]=MaxPosVarAR;
+    prcopt.thresar[2]=GloHwBias;
+    prcopt.thresar[3]=ThresAR3;
+    prcopt.thresar[4]=ThresAR4;
     prcopt.elmaskar =ElMaskAR*D2R;
     prcopt.elmaskhold=ElMaskHold*D2R;
     prcopt.thresslip=SlipThres;
     prcopt.maxtdiff =MaxAgeDiff;
     prcopt.maxgdop  =RejectGdop;
     prcopt.maxinno  =RejectThres;
+    prcopt.varholdamb=VarHoldAmb;
+    prcopt.gainholdamb=GainHoldAmb;
+    prcopt.outsingle=OutputSingle;
     if (BaseLineConst) {
         prcopt.baseline[0]=BaseLine[0];
         prcopt.baseline[1]=BaseLine[1];
@@ -909,6 +964,7 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     solopt.degf     =LatLonFormat;
     solopt.outhead  =OutputHead;
     solopt.outopt   =OutputOpt;
+    solopt.maxsolstd=MaxSolStd;
     solopt.datum    =OutputDatum;
     solopt.height   =OutputHeight;
     solopt.geoid    =OutputGeoid;
@@ -1033,7 +1089,7 @@ void __fastcall TMainForm::ViewFile(AnsiString file)
     int cstat;
     
     if (file=="") return;
-    cstat=uncompress(file.c_str(),tmpfile);
+    cstat=rtk_uncompress(file.c_str(),tmpfile);
     f=!cstat?file.c_str():tmpfile;
     
     viewer=new TTextViewer(Application);
@@ -1157,7 +1213,7 @@ void __fastcall TMainForm::LoadOpt(void)
     InputFile6->Items  =ReadList(ini,"hist","inputfile6");
     OutputFile->Items  =ReadList(ini,"hist","outputfile");
     
-    PosMode            =ini->ReadInteger("opt","posmode",        0);
+    PosMode            =ini->ReadInteger("opt","posmode",        2);
     Freq               =ini->ReadInteger("opt","freq",           1);
     Solution           =ini->ReadInteger("opt","solution",       0);
     ElMask             =ini->ReadFloat  ("opt","elmask",      15.0);
@@ -1170,11 +1226,11 @@ void __fastcall TMainForm::LoadOpt(void)
     IonoOpt            =ini->ReadInteger("opt","ionoopt",     IONOOPT_BRDC);
     TropOpt            =ini->ReadInteger("opt","tropopt",     TROPOPT_SAAS);
     RcvBiasEst         =ini->ReadInteger("opt","rcvbiasest",     0);
-    DynamicModel       =ini->ReadInteger("opt","dynamicmodel",   0);
+    DynamicModel       =ini->ReadInteger("opt","dynamicmodel",   1);
     TideCorr           =ini->ReadInteger("opt","tidecorr",       0);
     SatEphem           =ini->ReadInteger("opt","satephem",       0);
     ExSats             =ini->ReadString ("opt","exsats",        "");
-    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS);
+    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS|SYS_GLO);
     PosOpt[0]          =ini->ReadInteger("opt","posopt1",        0);
     PosOpt[1]          =ini->ReadInteger("opt","posopt2",        0);
     PosOpt[2]          =ini->ReadInteger("opt","posopt3",        0);
@@ -1183,23 +1239,32 @@ void __fastcall TMainForm::LoadOpt(void)
     PosOpt[5]          =ini->ReadInteger("opt","posopt6",        0);
     MapFunc            =ini->ReadInteger("opt","mapfunc",        0);
     
-    AmbRes             =ini->ReadInteger("opt","ambres",         1);
-    GloAmbRes          =ini->ReadInteger("opt","gloambres",      1);
-    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      1);
+    AmbRes             =ini->ReadInteger("opt","ambres",         3);
+    GloAmbRes          =ini->ReadInteger("opt","gloambres",      3);
+    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      0);
     ValidThresAR       =ini->ReadFloat  ("opt","validthresar", 3.0);
-    ThresAR2           =ini->ReadFloat  ("opt","thresar2",  0.9999);
-    ThresAR3           =ini->ReadFloat  ("opt","thresar3",    0.25);
+    MaxPosVarAR        =ini->ReadFloat  ("opt","maxposvarar", 0.10);
+    GloHwBias          =ini->ReadFloat  ("opt","glohwbias",   0.00);
+    ThresAR3           =ini->ReadFloat  ("opt","thresar3",    1E-7);
+    ThresAR4           =ini->ReadFloat  ("opt","thresar4",    1E-3);
     LockCntFixAmb      =ini->ReadInteger("opt","lockcntfixamb",  0);
-    FixCntHoldAmb      =ini->ReadInteger("opt","fixcntholdamb", 10);
-    ElMaskAR           =ini->ReadFloat  ("opt","elmaskar",     0.0);
-    ElMaskHold         =ini->ReadFloat  ("opt","elmaskhold",   0.0);
-    OutCntResetAmb     =ini->ReadInteger("opt","outcntresetbias",5);
+    FixCntHoldAmb      =ini->ReadInteger("opt","fixcntholdamb", 20);
+    ElMaskAR           =ini->ReadFloat  ("opt","elmaskar",    15.0);
+    ElMaskHold         =ini->ReadFloat  ("opt","elmaskhold",  15.0);
+    OutCntResetAmb     =ini->ReadInteger("opt","outcntresetbias",20);
     SlipThres          =ini->ReadFloat  ("opt","slipthres",   0.05);
     MaxAgeDiff         =ini->ReadFloat  ("opt","maxagediff",  30.0);
-    RejectThres        =ini->ReadFloat  ("opt","rejectthres", 30.0);
+    RejectThres        =ini->ReadFloat  ("opt","rejectthres", 1000);
+    VarHoldAmb         =ini->ReadFloat  ("opt","varholdamb",   0.1);
+    GainHoldAmb        =ini->ReadFloat  ("opt","gainholdamb", 0.01);
     RejectGdop         =ini->ReadFloat  ("opt","rejectgdop",  30.0);
     ARIter             =ini->ReadInteger("opt","ariter",         1);
     NumIter            =ini->ReadInteger("opt","numiter",        1);
+    MinFixSats         =ini->ReadInteger("opt","minfixsats",     4);
+    MinHoldSats        =ini->ReadInteger("opt","minholdsats",    5);
+    MinDropSats        =ini->ReadInteger("opt","mindropsats",   10);
+    ARFilter           =ini->ReadInteger("opt","arfilter",       1);
+    RcvStds            =ini->ReadInteger("opt","rcvstds",        0);
     CodeSmooth         =ini->ReadInteger("opt","codesmooth",     0);
     BaseLine[0]        =ini->ReadFloat  ("opt","baselinelen",  0.0);
     BaseLine[1]        =ini->ReadFloat  ("opt","baselinesig",  0.0);
@@ -1212,28 +1277,30 @@ void __fastcall TMainForm::LoadOpt(void)
     FieldSep           =ini->ReadString ("opt","fieldsep",      "");
     OutputHead         =ini->ReadInteger("opt","outputhead",     1);
     OutputOpt          =ini->ReadInteger("opt","outputopt",      1);
+    OutputSingle       =ini->ReadInteger("opt","outputsingle",   0);
+    MaxSolStd          =ini->ReadFloat  ("opt","maxsolstd",    0.0);
     OutputDatum        =ini->ReadInteger("opt","outputdatum",    0);
     OutputHeight       =ini->ReadInteger("opt","outputheight",   0);
     OutputGeoid        =ini->ReadInteger("opt","outputgeoid",    0);
     SolStatic          =ini->ReadInteger("opt","solstatic",      0);
     DebugTrace         =ini->ReadInteger("opt","debugtrace",     0);
-    DebugStatus        =ini->ReadInteger("opt","debugstatus",    0);
+    DebugStatus        =ini->ReadInteger("opt","debugstatus",    2);
     
-    MeasErrR1          =ini->ReadFloat  ("opt","measeratio1",100.0);
-    MeasErrR2          =ini->ReadFloat  ("opt","measeratio2",100.0);
+    MeasErrR1          =ini->ReadFloat  ("opt","measeratio1",300.0);
+    MeasErrR2          =ini->ReadFloat  ("opt","measeratio2",300.0);
     MeasErr2           =ini->ReadFloat  ("opt","measerr2",   0.003);
     MeasErr3           =ini->ReadFloat  ("opt","measerr3",   0.003);
     MeasErr4           =ini->ReadFloat  ("opt","measerr4",   0.000);
-    MeasErr5           =ini->ReadFloat  ("opt","measerr5",  10.000);
+    MeasErr5           =ini->ReadFloat  ("opt","measerr5",   1.000);
     SatClkStab         =ini->ReadFloat  ("opt","satclkstab", 5E-12);
     PrNoise1           =ini->ReadFloat  ("opt","prnoise1",    1E-4);
     PrNoise2           =ini->ReadFloat  ("opt","prnoise2",    1E-3);
     PrNoise3           =ini->ReadFloat  ("opt","prnoise3",    1E-4);
-    PrNoise4           =ini->ReadFloat  ("opt","prnoise4",    1E+1);
-    PrNoise5           =ini->ReadFloat  ("opt","prnoise5",    1E+1);
+    PrNoise4           =ini->ReadFloat  ("opt","prnoise4",     3.0);
+    PrNoise5           =ini->ReadFloat  ("opt","prnoise5",     1.0);
     
     RovPosType         =ini->ReadInteger("opt","rovpostype",     0);
-    RefPosType         =ini->ReadInteger("opt","refpostype",     0);
+    RefPosType         =ini->ReadInteger("opt","refpostype",     5);
     RovPos[0]          =ini->ReadFloat  ("opt","rovpos1",      0.0);
     RovPos[1]          =ini->ReadFloat  ("opt","rovpos2",      0.0);
     RovPos[2]          =ini->ReadFloat  ("opt","rovpos3",      0.0);
@@ -1328,6 +1395,7 @@ void __fastcall TMainForm::LoadOpt(void)
     TTextViewer::FontD=new TFont;
     TTextViewer::FontD->Name=ini->ReadString ("viewer","fontname","Courier New");
     TTextViewer::FontD->Size=ini->ReadInteger("viewer","fontsize",9);
+    Width=ini->ReadInteger("window","width",486);
     delete ini;
 }
 // save options to ini file -------------------------------------------------
@@ -1395,8 +1463,10 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("opt","gloambres",   GloAmbRes   );
     ini->WriteInteger("opt","bdsambres",   BdsAmbRes   );
     ini->WriteFloat  ("opt","validthresar",ValidThresAR);
-    ini->WriteFloat  ("opt","thresar2",    ThresAR2    );
+    ini->WriteFloat  ("opt","maxposvarar", MaxPosVarAR );
+    ini->WriteFloat  ("opt","glohwbias",   GloHwBias   );
     ini->WriteFloat  ("opt","thresar3",    ThresAR3    );
+    ini->WriteFloat  ("opt","thresar4",    ThresAR4    );
     ini->WriteInteger("opt","lockcntfixamb",LockCntFixAmb);
     ini->WriteInteger("opt","fixcntholdamb",FixCntHoldAmb);
     ini->WriteFloat  ("opt","elmaskar",    ElMaskAR    );
@@ -1406,8 +1476,15 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteFloat  ("opt","maxagediff",  MaxAgeDiff  );
     ini->WriteFloat  ("opt","rejectgdop",  RejectGdop  );
     ini->WriteFloat  ("opt","rejectthres", RejectThres );
+    ini->WriteFloat  ("opt","varholdamb",  VarHoldAmb  );
+    ini->WriteFloat  ("opt","gainholdamb", GainHoldAmb );
     ini->WriteInteger("opt","ariter",      ARIter      );
     ini->WriteInteger("opt","numiter",     NumIter     );
+    ini->WriteInteger("opt","minfixsats",  MinFixSats  );
+    ini->WriteInteger("opt","minholdsats", MinHoldSats );
+    ini->WriteInteger("opt","mindropsats", MinDropSats );
+    ini->WriteInteger("opt","arfilter",    ARFilter    );
+    ini->WriteInteger("opt","rcvstds",     RcvStds     );
     ini->WriteInteger("opt","codesmooth",  CodeSmooth  );
     ini->WriteFloat  ("opt","baselinelen", BaseLine[0] );
     ini->WriteFloat  ("opt","baselinesig", BaseLine[1] );
@@ -1420,6 +1497,8 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteString ("opt","fieldsep",    FieldSep    );
     ini->WriteInteger("opt","outputhead",  OutputHead  );
     ini->WriteInteger("opt","outputopt",   OutputOpt   );
+    ini->WriteInteger("opt","outputsingle",OutputSingle);
+    ini->WriteFloat  ("opt","maxsolstd",   MaxSolStd   );
     ini->WriteInteger("opt","outputdatum", OutputDatum );
     ini->WriteInteger("opt","outputheight",OutputHeight);
     ini->WriteInteger("opt","outputgeoid", OutputGeoid );
@@ -1534,9 +1613,63 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("viewer","color2",(int)TTextViewer::Color2  );
     ini->WriteString ("viewer","fontname",TTextViewer::FontD->Name);
     ini->WriteInteger("viewer","fontsize",TTextViewer::FontD->Size);
+    
+    ini->WriteInteger("window","width",Width);
     delete ini;
 }
 
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::Panel4Resize(TObject *Sender)
+{
+	TButton *btns[]={
+		BtnInputFile1,BtnInputFile2,BtnInputFile3,BtnInputFile4,
+		BtnInputFile5,BtnInputFile6
+	};
+	TComboBox *boxes[]={
+		InputFile1,InputFile2,InputFile3,InputFile4,InputFile5,InputFile6
+	};
+	int w=Panel4->Width;
+	
+	for (int i=0;i<6;i++) {
+		btns[i]->Left=w-btns[i]->Width-5;
+		boxes[i]->Width=w-btns[i]->Width-boxes[i]->Left-6;
+	}
+	BtnInputView1->Left=InputFile1->Left+InputFile1->Width-BtnInputView1->Width;
+	BtnInputPlot1->Left=BtnInputView1->Left-BtnInputPlot1->Width;
+	BtnInputView2->Left=InputFile2->Left+InputFile2->Width-BtnInputView2->Width;
+	BtnInputPlot2->Left=BtnInputView2->Left-BtnInputPlot2->Width;
+	BtnInputView6->Left=InputFile3->Left+InputFile3->Width-BtnInputView6->Width;
+	BtnInputView5->Left=BtnInputView6->Left-BtnInputView5->Width;
+	BtnInputView4->Left=BtnInputView5->Left-BtnInputView4->Width;
+	BtnInputView3->Left=BtnInputView4->Left-BtnInputView3->Width;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Panel5Resize(TObject *Sender)
+{
+	int w=Panel5->Width;
+	
+	BtnOutDir->Left=w-BtnOutDir->Width-5;
+	OutDir->Width=w-BtnOutDir->Width-OutDir->Left-6;
+	BtnOutputFile->Left=w-BtnOutputFile->Width-5;
+	OutputFile->Width=w-BtnOutputFile->Width-OutputFile->Left-6;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Panel2Resize(TObject *Sender)
+{
+	TBitBtn *btns[]={
+		BtnPlot,BtnView,BtnToKML,BtnOption,BtnExec,BtnExit
+	};
+	int w=(Panel2->Width-2)/6;
+	
+	for (int i=0;i<6;i++) {
+		btns[i]->Width=w;
+		btns[i]->Left=i*w+1;
+	}
+	BtnAbort->Width=BtnExec->Width;
+	BtnAbort->Left =BtnExec->Left;
+}
+//---------------------------------------------------------------------------
 

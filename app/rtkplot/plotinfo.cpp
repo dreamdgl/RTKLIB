@@ -122,7 +122,7 @@ void __fastcall TPlot::UpdateTimeSol(void)
             msgs[data->stat-1]=s.sprintf("%d:%s",data->stat,sol[data->stat]);
         }
     }
-    ShowMsg(msg);
+    ShowMsg(A2U(msg));
     ShowLegend(msgs);
 }
 // update statistics-information for observation-data plot ------------------
@@ -318,7 +318,8 @@ void __fastcall TPlot::UpdateSatList(void)
 void __fastcall TPlot::UpdateObsType(void)
 {
     AnsiString s;
-    char *codes[MAXCODE+1],freqs[]="125678";
+    char *codes[MAXCODE+1];
+    const char *freqs[]={"L1","L2","E5b","L5","E6","E5ab"};
     int i,j,n=0,cmask[MAXCODE+1]={0},fmask[6]={0};
     
     trace(3,"UpdateObsType\n");
@@ -328,7 +329,8 @@ void __fastcall TPlot::UpdateObsType(void)
     }
     for (i=1;i<=MAXCODE;i++) {
         if (!cmask[i]) continue;
-        codes[n++]=code2obs(i,&j);
+
+        codes[n++]=code2obs(satsys(Obs.data[i].sat,NULL),i,&j);
         fmask[j-1]=1;
     }
     ObsType ->Items->Clear();
@@ -337,8 +339,8 @@ void __fastcall TPlot::UpdateObsType(void)
     
     for (i=0;i<6;i++) {
         if (!fmask[i]) continue;
-        ObsType ->Items->Add(s.sprintf("L%c",freqs[i]));
-        ObsType2->Items->Add(s.sprintf("L%c",freqs[i]));
+        ObsType ->Items->Add(s.sprintf("%s",freqs[i]));
+        ObsType2->Items->Add(s.sprintf("%s",freqs[i]));
     }
     for (i=0;i<n;i++) {
         ObsType ->Items->Add(s.sprintf("L%s",codes[i]));
@@ -364,13 +366,13 @@ void __fastcall TPlot::UpdatePoint(int x, int y)
         GraphT->ToPos(p,enu[0],enu[1]);
         
         if (PointType==1||norm(OPos,3)<=0.0) {
-            msg.sprintf("E:%+.3f m N:%+.3f m",enu[0],enu[1]);
+            msg.sprintf("E:%+.4f m N:%+.4f m",enu[0],enu[1]);
         }
         else if (PointType==2) {
             r=norm(enu,2);
             az=r<=0.0?0.0:ATAN2(enu[0],enu[1])*R2D;
             if (az<0.0) az+=360.0;
-            msg.sprintf("R:%.3f m D:%5.1f" CHARDEG,r,az);
+            msg.sprintf("R:%.4f m D:%5.1f" CHARDEG,r,az);
         }
         else {
             ecef2pos(OPos,pos);
@@ -408,3 +410,4 @@ void __fastcall TPlot::UpdatePoint(int x, int y)
     Message2->Caption=A2U(msg);
 }
 //---------------------------------------------------------------------------
+

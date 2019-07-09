@@ -22,10 +22,13 @@ static const char *XMLNS="http://www.topografix.com/GPX/1/1";
 // read solutions -----------------------------------------------------------
 void __fastcall TPlot::ReadSol(TStrings *files, int sel)
 {
+	FILETIME tc,ta,tw;
+	SYSTEMTIME st;
+	HANDLE h;
     solbuf_t sol={0};
     AnsiString s;
     gtime_t ts,te;
-    double tint;
+    double tint,ep[6];
     int i,n=0;
     char *paths[MAXNFILE];
     
@@ -36,6 +39,23 @@ void __fastcall TPlot::ReadSol(TStrings *files, int sel)
     if (files->Count<=0) return;
     
     ReadWaitStart();
+	
+	s=files->Strings[0];
+    
+	if ((h=CreateFile(s.c_str(),GENERIC_READ,0,NULL,OPEN_EXISTING,
+					  FILE_ATTRIBUTE_NORMAL,0))==INVALID_HANDLE_VALUE) {
+		return;
+	}
+	GetFileTime(h,&tc,&ta,&tw);
+	CloseHandle(h);
+	FileTimeToSystemTime(&tc,&st); // file create time
+	ep[0]=st.wYear;
+	ep[1]=st.wMonth;
+	ep[2]=st.wDay;
+	ep[3]=st.wHour;
+	ep[4]=st.wMinute;
+	ep[5]=st.wSecond;
+	sol.time=utc2gpst(epoch2time(ep));
     
     for (i=0;i<files->Count&&n<MAXNFILE;i++) {
         strcpy(paths[n++],U2A(files->Strings[i]).c_str());
@@ -94,6 +114,7 @@ void __fastcall TPlot::ReadSol(TStrings *files, int sel)
     
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // read solution status -----------------------------------------------------
 void __fastcall TPlot::ReadSolStat(TStrings *files, int sel)
@@ -176,6 +197,7 @@ void __fastcall TPlot::ReadObs(TStrings *files)
     UpdateObsType();
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // read observation data rinex ----------------------------------------------
 int __fastcall TPlot::ReadObsRnx(TStrings *files, obs_t *obs, nav_t *nav,
@@ -216,6 +238,8 @@ int __fastcall TPlot::ReadObsRnx(TStrings *files, obs_t *obs, nav_t *nav,
             strcpy(p,".hnav"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             strcpy(p,".qnav"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             strcpy(p,".lnav"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
+            strcpy(p,".cnav"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
+            strcpy(p,".inav"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
         }
         else if (!strcmp(p+3,"o" )||!strcmp(p+3,"d" )||
                  !strcmp(p+3,"O" )||!strcmp(p+3,"D" )) {
@@ -226,6 +250,8 @@ int __fastcall TPlot::ReadObsRnx(TStrings *files, obs_t *obs, nav_t *nav,
             strcpy(p+3,"H"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             strcpy(p+3,"Q"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             strcpy(p+3,"L"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
+            strcpy(p+3,"C"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
+            strcpy(p+3,"I"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             strcpy(p+3,"P"); readrnxt(navfile,1,ts,te,tint,opt,NULL,nav,NULL);
             
             if (nav->n>n||!(q=strrchr(navfile,'\\'))) continue;
@@ -285,6 +311,7 @@ void __fastcall TPlot::ReadNav(TStrings *files)
     ReadWaitEnd();
     
     UpdatePlot();
+    UpdateEnable();
 }
 // read elevation mask data -------------------------------------------------
 void __fastcall TPlot::ReadElMaskData(AnsiString file)
@@ -317,8 +344,9 @@ void __fastcall TPlot::ReadElMaskData(AnsiString file)
     }
     fclose(fp);
     UpdatePlot();
+    UpdateEnable();
 }
-// generate vsibility data ----------------------------------------------------
+// generate visibility data ---------------------------------------------------
 void __fastcall TPlot::GenVisData(void)
 {
     gtime_t time,ts,te;
@@ -392,14 +420,18 @@ void __fastcall TPlot::GenVisData(void)
     UpdateObsType();
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // read map image data ------------------------------------------------------
 void __fastcall TPlot::ReadMapData(AnsiString file)
 {
     TJPEGImage *image=new TJPEGImage;
     AnsiString s;
+    double pos[3];
     
     trace(3,"ReadMapData\n");
+    
+    ShowMsg(s.sprintf("reading map image... %s",file.c_str()));
     
     try {
         image->LoadFromFile(file);
@@ -416,12 +448,19 @@ void __fastcall TPlot::ReadMapData(AnsiString file)
     delete image;
     
     ReadMapTag(file);
-    
-    BtnShowMap->Down=true;
+    if (norm(OPos,3)<=0.0&&(MapLat!=0.0||MapLon!=0.0)) {
+        pos[0]=MapLat*D2R;
+        pos[1]=MapLon*D2R;
+        pos[2]=0.0;
+        pos2ecef(pos,OPos);
+    }
+    BtnShowImg->Down=true;
     
     MapAreaDialog->UpdateField();
     UpdateOrigin();
     UpdatePlot();
+    UpdateEnable();
+    ShowMsg("");
 }
 // resample image pixel -----------------------------------------------------
 #define ResPixelNN(img1,x,y,b1,pix) {\
@@ -515,7 +554,7 @@ void __fastcall TPlot::UpdateSky(void)
             }
             else {
                 r=acos(q[2])/(PI/2.0);
-                a=sqrt(SQR(q[0])+SQR(q[1]));
+                a=SQRT(SQR(q[0])+SQR(q[1]));
                 xp=r*q[0]/a;
                 yp=r*q[1]/a;
             }
@@ -602,6 +641,8 @@ void __fastcall TPlot::ReadSkyData(AnsiString file)
     
     trace(3,"ReadSkyData\n");
     
+    ShowMsg(s.sprintf("reading sky image... %s",file.c_str()));
+    
     try {
         image->LoadFromFile(file);
     }
@@ -631,7 +672,8 @@ void __fastcall TPlot::ReadSkyData(AnsiString file)
     
     ReadSkyTag(file+".tag");
     
-    BtnShowMap->Down=true;
+    ShowMsg("");
+    BtnShowImg->Down=true;
     
     UpdateSky();
 }
@@ -667,13 +709,18 @@ void __fastcall TPlot::ReadMapTag(AnsiString file)
 void __fastcall TPlot::ReadShapeFile(TStrings *files)
 {
     UnicodeString name;
+    AnsiString s;
+    double pos[3];
     char path[1024];
     int i,j;
+    
+    ReadWaitStart();
     
     gis_free(&Gis);
     
     for (i=0;i<files->Count&&i<MAXMAPLAYER;i++) {
         strcpy(path,U2A(files->Strings[i]).c_str());
+        ShowMsg(s.sprintf("reading shapefile... %s",path));
         gis_read(path,&Gis,i);
         
         name=files->Strings[i];
@@ -685,20 +732,34 @@ void __fastcall TPlot::ReadShapeFile(TStrings *files)
         }
         strcpy(Gis.name[i],U2A(name).c_str());
     }
-    BtnShowPoint->Down=true;
+    ReadWaitEnd();
+    ShowMsg("");
     
+    BtnShowMap->Down=true;
+    
+    if (norm(OPos,3)<=0.0) {
+        pos[0]=(Gis.bound[0]+Gis.bound[1])/2.0;
+        pos[1]=(Gis.bound[2]+Gis.bound[3])/2.0;
+        pos[2]=0.0;
+        pos2ecef(pos,OPos);
+    }
     UpdateOrigin();
     UpdatePlot();
+    UpdateEnable();
 }
 // read waypoint ------------------------------------------------------------
 void __fastcall TPlot::ReadWaypoint(AnsiString file)
 {
-    UTF8String str,label1(L"<ogr:–¼Ì>"),label2(L"<ogr:“_–¼Ì>");
+    UTF8String label1(L"<ogr:–¼Ì>"),label2(L"<ogr:“_–¼Ì>");
+    AnsiString s;
     FILE *fp;
     char buff[1024],name[256]="",*p;
     double pos[3]={0};
     
     if (!(fp=fopen(file.c_str(),"r"))) return;
+    
+    ReadWaitStart();
+    ShowMsg(s.sprintf("reading waypoint... %s",file.c_str()));
     
     NWayPnt=0;
     
@@ -723,20 +784,25 @@ void __fastcall TPlot::ReadWaypoint(AnsiString file)
             PntPos[NWayPnt][0]=pos[0];
             PntPos[NWayPnt][1]=pos[1];
             PntPos[NWayPnt][2]=pos[2];
-            str=name;
-            PntName[NWayPnt++]=str;
+            PntName[NWayPnt++]=name; // UTF-8
             pos[0]=pos[1]=pos[2]=0.0;
             name[0]='\0';
         }
     }
     fclose(fp);
+    
+    ReadWaitEnd();
+    ShowMsg("");
+    
+    BtnShowMap->Down=true;
+    
     UpdatePlot();
+    UpdateEnable();
     PntDialog->SetPoint();
 }
 // save waypoint ------------------------------------------------------------
 void __fastcall TPlot::SaveWaypoint(AnsiString file)
 {
-    UTF8String str_utf8;
     FILE *fp;
     int i;
     
@@ -751,8 +817,8 @@ void __fastcall TPlot::SaveWaypoint(AnsiString file)
         if (PntPos[i][2]!=0.0) {
             fprintf(fp," <ele>%.4f</ele>\n",PntPos[i][2]);
         }
-        str_utf8=PntName[i];
-        fprintf(fp," <name>%s</name>\n",str_utf8.c_str());
+        UTF8String str(PntName[i]);
+        fprintf(fp," <name>%s</name>\n",str); // UTF-8
         fprintf(fp,"</wpt>\n");
     }
     fprintf(fp,"%s\n",TAILGPX);
@@ -871,7 +937,7 @@ void __fastcall TPlot::SaveSnrMp(AnsiString file)
             if (Obs.data[j].sat!=i+1) continue;
             
             for (k=0;k<NFREQ+NEXOBS;k++) {
-                if (strstr(code2obs(Obs.data[j].code[k],NULL),code)) break;
+                if (strstr(code2obs(0,Obs.data[j].code[k],NULL),code)) break;
             }
             if (k>=NFREQ+NEXOBS) continue;
             
@@ -972,9 +1038,12 @@ void __fastcall TPlot::Connect(void)
     BtnSol12  ->Down=false;
     BtnShowTrack->Down=true;
     BtnFixHoriz->Down=true;
-    UpdateEnable();
+    BtnReload->Visible=false;
+    StrStatus->Left=Panel11->Width-BtnOptions->Width;
+    StrStatus->Visible=true;
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // disconnect from external sources -----------------------------------------
 void __fastcall TPlot::Disconnect(void)
@@ -1001,8 +1070,12 @@ void __fastcall TPlot::Disconnect(void)
     if (strstr(caption,"CONNECT")) {
         Caption=s.sprintf("DISCONNECT%s",caption+7);
     }
+    StrStatus->Visible=false;
+    BtnReload->Left=Panel11->Width-BtnOptions->Width;
+    BtnReload->Visible=true;
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // check observation data types ---------------------------------------------
 int __fastcall TPlot::CheckObs(AnsiString file)
@@ -1131,14 +1204,10 @@ void __fastcall TPlot::UpdateMp(void)
         for (j=0;j<NFREQ+NEXOBS;j++) {
             Mp[j][i]=0.0;
             
-            code2obs(data->code[j],&f1);
-            
-            if (sys==SYS_CMP) {
-                if      (f1==5) f1=2; /* B2 */
-                else if (f1==4) f1=3; /* B3 */
-            }
-            if      (sys==SYS_GAL) f2=f1==1?3:1; /* E1/E5a */
-            else if (sys==SYS_SBS) f2=f1==1?3:1; /* L1/L5 */
+            code2obs(sys,data->code[j],&f1);
+
+            if      (sys==SYS_GAL) f2=f1==1?3:1; /* E1/E5b */
+            else if (sys==SYS_SBS) f2=f1==1?4:1; /* L1/L5 */
             else if (sys==SYS_CMP) f2=f1==1?2:1; /* B1/B2 */
             else                   f2=f1==1?2:1; /* L1/L2 */
             
@@ -1159,12 +1228,8 @@ void __fastcall TPlot::UpdateMp(void)
         for (j=k=n=0,B=0.0;j<Obs.n;j++) {
             if (Obs.data[j].sat!=sat) continue;
             
-            code2obs(Obs.data[j].code[i],&f1);
-            
-            if (sys==SYS_CMP) {
-                if      (f1==5) f1=2; /* B2 */
-                else if (f1==4) f1=3; /* B3 */
-            }
+            code2obs(sys,Obs.data[j].code[i],&f1);
+
             if      (sys==SYS_GAL) f2=f1==1?3:1;
             else if (sys==SYS_CMP) f2=f1==1?2:1;
             else                   f2=f1==1?2:1;
@@ -1300,6 +1365,7 @@ void __fastcall TPlot::Clear(void)
     
     UpdateTime();
     UpdatePlot();
+    UpdateEnable();
 }
 // reload data --------------------------------------------------------------
 void __fastcall TPlot::Reload(void)

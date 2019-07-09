@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * sbas.c : sbas functions
 *
-*          Copyright (C) 2007-2011 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2007-2016 by T.TAKASU, All rights reserved.
 *
 * option : -DRRCENA  enable rrc correction
 *          
@@ -34,10 +34,9 @@
 *                           (2.4.0_p4)
 *           2011/01/15 1.8  use api ionppp()
 *                           add prn mask of qzss for qzss L1SAIF
+*           2016/07/29 1.9  crc24q() -> rtk_crc24q()
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
-
-static const char rcsid[]="$Id: sbas.c,v 1.1 2008/07/17 21:48:06 ttaka Exp $";
 
 /* constants -----------------------------------------------------------------*/
 
@@ -485,12 +484,6 @@ static void readmsgs(const char *file, int sel, gtime_t ts, gtime_t te,
             if (sscanf(++p,"%d,%d",&ch,&prn)<2) continue;
             if (!(p=getfield(p,4))) continue;
         }
-        else if (!strncmp(buff,"$FRMA",5)) { /* NovAtel OEM3 */
-            if (!(p=getfield(buff,2))) continue;
-            if (sscanf(p,"%d,%lf,%d",&week,&tow,&prn)<3) continue;
-            if (!(p=getfield(p,6))) continue;
-            if (week<WEEKOFFSET) week+=WEEKOFFSET;
-        }
         else continue;
         
         if (sel!=0&&sel!=prn) continue;
@@ -912,5 +905,5 @@ extern int sbsdecodemsg(gtime_t time, int prn, const unsigned int *words,
     for (i=28;i>0;i--) f[i]=(sbsmsg->msg[i]>>6)+(sbsmsg->msg[i-1]<<2);
     f[0]=sbsmsg->msg[0]>>6;
     
-    return crc24q(f,29)==(words[7]&0xFFFFFF); /* check crc */
+    return rtk_crc24q(f,29)==(words[7]&0xFFFFFF); /* check crc */
 }

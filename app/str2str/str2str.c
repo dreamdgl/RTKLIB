@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * str2str.c : console version of stream server
 *
-*          Copyright (C) 2007-2016 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2007-2018 by T.TAKASU, All rights reserved.
 *
 * version : $Revision: 1.1 $ $Date: 2008/07/17 21:54:53 $
 * history : 2009/06/17  1.0  new
@@ -20,21 +20,26 @@
 *           2016/01/23  1.10 enable septentrio
 *           2016/01/26  1.11 fix bug on station position by -p option (#126)
 *                            add option -px
+*           2016/07/01  1.12 support CMR/CMR+
+*           2016/07/23  1.13 add option -c1 -c2 -c3 -c4
+*           2016/09/03  1.14 support ntrip caster
+*                            add option -ft,-fl
+*           2016/09/06  1.15 add reload soure table by USR2 signal
+*           2016/09/17  1.16 add option -b
+*           2017/05/26  1.17 add input format tersus
 *-----------------------------------------------------------------------------*/
 #include <signal.h>
 #include <unistd.h>
 #include "rtklib.h"
 
-static const char rcsid[]="$Id:$";
-
 #define PRGNAME     "str2str"          /* program name */
 #define MAXSTR      5                  /* max number of streams */
-#define MAXRCVCMD   4096               /* max length of receiver command */
 #define TRFILE      "str2str.trace"    /* trace file */
 
 /* global variables ----------------------------------------------------------*/
 static strsvr_t strsvr;                /* stream server */
 static volatile int intrflg=0;         /* interrupt flag */
+static char srctbl[1024]="";           /* source table file */
 
 /* help text -----------------------------------------------------------------*/
 static const char *help[]={
@@ -50,7 +55,9 @@ static const char *help[]={
 " if both of the input stream and the output stream follow #format, the",
 " format of input messages are converted to output. To specify the output",
 " messages, use -msg option. If the option -in or -out omitted, stdin for",
-" input or stdout for output is used.",
+" input or stdout for output is used. If the stream in the option -in or -out",
+" is null, stdin or stdout is used as well. To reload ntrip source table",
+" specified by the option -ft, send SIGUSR2 to the process",
 " Command options are as follows.",
 "",
 " -in  stream[#format] input  stream path and format",
@@ -61,16 +68,18 @@ static const char *help[]={
 "    tcp server   : tcpsvr://:port",
 "    tcp client   : tcpcli://addr[:port]",
 "    ntrip client : ntrip://[user[:passwd]@]addr[:port][/mntpnt]",
-"    ntrip server : ntrips://[:passwd@]addr[:port][/mntpnt[:str]] (only out)",
+"    ntrip server : ntrips://[:passwd@]addr[:port]/mntpnt[:str] (only out)",
+"    ntrip caster server: ntripc_s://[:passwd@][:port] (only in)",
+"    ntrip caster client: ntripc_c://[user:passwd@][:port]/mntpnt (only out)",
 "    file         : [file://]path[::T][::+start][::xseppd][::S=swap]",
 "",
 "  format",
 "    rtcm2        : RTCM 2 (only in)",
 "    rtcm3        : RTCM 3",
 "    nov          : NovAtel OEMV/4/6,OEMStar (only in)",
-"    oem3         : NovAtel OEM3 (only in)",
+"    cnav         : ComNav (only in)",
 "    ubx          : ublox LEA-4T/5T/6T (only in)",
-"    ss2          : NovAtel Superstar II (only in)",
+"    swiftnav     : SwiftNav Piksi Multi",
 "    hemis        : Hemisphere Eclipse/Crescent (only in)",
 "    stq          : SkyTraq S1315F (only in)",
 "    gw10         : Furuno GW10 (only in)",
@@ -79,6 +88,8 @@ static const char *help[]={
 "    binex        : BINEX (only in)",
 "    rt17         : Trimble RT17 (only in)",
 "    sbf          : Septentrio SBF (only in)",
+"    cmr          : CMR/CMR+ (only in)",
+"    tersus       : TERSUS (only in)",
 "",
 " -msg \"type[(tint)][,type[(tint)]...]\"",
 "                   rtcm message types and output intervals (s)",
@@ -88,7 +99,11 @@ static const char *help[]={
 " -r  msec          reconnect interval (ms) [10000]",
 " -n  msec          nmea request cycle (m) [0]",
 " -f  sec           file swap margin (s) [30]",
-" -c  file          receiver commands file [no]",
+" -c  file          input commands file [no]",
+" -c1 file          output 1 commands file [no]",
+" -c2 file          output 2 commands file [no]",
+" -c3 file          output 3 commands file [no]",
+" -c4 file          output 4 commands file [no]",
 " -p  lat lon hgt   station position (latitude/longitude/height) (deg,m)",
 " -px x y z         station position (x/y/z-ecef) (m)",
 " -a  antinfo       antenna info (separated by ,)",
@@ -96,7 +111,10 @@ static const char *help[]={
 " -o  e n u         antenna offset (e,n,u) (m)",
 " -l  local_dir     ftp/http local directory []",
 " -x  proxy_addr    http/ntrip proxy address [no]",
+" -b  str_no        relay back messages from output str to input str [no]",
 " -t  level         trace level [0]",
+" -ft file          ntrip souce table file []",
+" -fl file          log file [str2str.trace]",
 " -h                print help",
 };
 /* print help ----------------------------------------------------------------*/
@@ -111,6 +129,12 @@ static void sigfunc(int sig)
 {
     intrflg=1;
 }
+/* reload source table by SIGUSR2 --------------------------------------------*/
+static void reload_srctbl(int sig)
+{
+    strsvrsetsrctbl(&strsvr,srctbl);
+    signal(SIGUSR2,reload_srctbl);
+}
 /* decode format -------------------------------------------------------------*/
 static void decodefmt(char *path, int *fmt)
 {
@@ -122,9 +146,9 @@ static void decodefmt(char *path, int *fmt)
         if      (!strcmp(p,"#rtcm2")) *fmt=STRFMT_RTCM2;
         else if (!strcmp(p,"#rtcm3")) *fmt=STRFMT_RTCM3;
         else if (!strcmp(p,"#nov"  )) *fmt=STRFMT_OEM4;
-        else if (!strcmp(p,"#oem3" )) *fmt=STRFMT_OEM3;
+        else if (!strcmp(p,"#cnav" )) *fmt=STRFMT_CNAV;
         else if (!strcmp(p,"#ubx"  )) *fmt=STRFMT_UBX;
-        else if (!strcmp(p,"#ss2"  )) *fmt=STRFMT_SS2;
+        else if (!strcmp(p,"#swift")) *fmt=STRFMT_SBP;
         else if (!strcmp(p,"#hemis")) *fmt=STRFMT_CRES;
         else if (!strcmp(p,"#stq"  )) *fmt=STRFMT_STQ;
         else if (!strcmp(p,"#gw10" )) *fmt=STRFMT_GW10;
@@ -133,6 +157,8 @@ static void decodefmt(char *path, int *fmt)
         else if (!strcmp(p,"#binex")) *fmt=STRFMT_BINEX;
         else if (!strcmp(p,"#rt17" )) *fmt=STRFMT_RT17;
         else if (!strcmp(p,"#sbf"  )) *fmt=STRFMT_SEPT;
+        else if (!strcmp(p,"#cmr"  )) *fmt=STRFMT_CMR;
+        else if (!strcmp(p,"#tersus")) *fmt=STRFMT_TERSUS;
         else return;
         *p='\0';
     }
@@ -153,12 +179,14 @@ static int decodepath(const char *path, int *type, char *strpath, int *fmt)
         *type=STR_FILE;
         return 1;
     }
-    if      (!strncmp(path,"serial",6)) *type=STR_SERIAL;
-    else if (!strncmp(path,"tcpsvr",6)) *type=STR_TCPSVR;
-    else if (!strncmp(path,"tcpcli",6)) *type=STR_TCPCLI;
-    else if (!strncmp(path,"ntrips",6)) *type=STR_NTRIPSVR;
-    else if (!strncmp(path,"ntrip", 5)) *type=STR_NTRIPCLI;
-    else if (!strncmp(path,"file",  4)) *type=STR_FILE;
+    if      (!strncmp(path,"serial",  6)) *type=STR_SERIAL;
+    else if (!strncmp(path,"tcpsvr",  6)) *type=STR_TCPSVR;
+    else if (!strncmp(path,"tcpcli",  6)) *type=STR_TCPCLI;
+    else if (!strncmp(path,"ntripc_s",8)) *type=STR_NTRIPC_S;
+    else if (!strncmp(path,"ntripc_c",8)) *type=STR_NTRIPC_C;
+    else if (!strncmp(path,"ntrips",  6)) *type=STR_NTRIPSVR;
+    else if (!strncmp(path,"ntrip",   5)) *type=STR_NTRIPCLI;
+    else if (!strncmp(path,"file",    4)) *type=STR_FILE;
     else {
         fprintf(stderr,"stream path error: %s\n",buff);
         return 0;
@@ -178,7 +206,7 @@ static void readcmd(const char *file, char *cmd, int type)
     if (!(fp=fopen(file,"r"))) return;
     
     while (fgets(buff,sizeof(buff),fp)) {
-        if (*buff=='@') i=1;
+        if (*buff=='@') i++;
         else if (i==type&&p+strlen(buff)+1<cmd+MAXRCVCMD) {
             p+=sprintf(p,"%s",buff);
         }
@@ -188,20 +216,25 @@ static void readcmd(const char *file, char *cmd, int type)
 /* str2str -------------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    static char cmd[MAXRCVCMD]="";
+    static char cmd_strs[MAXSTR][MAXRCVCMD]={"","","","",""};
+    static char cmd_periodic_strs[MAXSTR][MAXRCVCMD]={"","","","",""};
     const char ss[]={'E','-','W','C','C'};
     strconv_t *conv[MAXSTR]={NULL};
     double pos[3],stapos[3]={0},stadel[3]={0};
-    char *paths[MAXSTR],s[MAXSTR][MAXSTRPATH]={{0}},*cmdfile="";
+    char *paths[MAXSTR],s[MAXSTR][MAXSTRPATH]={{0}};
+    char *cmdfile[MAXSTR]={"","","","",""},*cmds[MAXSTR],*cmds_periodic[MAXSTR];
     char *local="",*proxy="",*msg="1004,1019",*opt="",buff[256],*p;
     char strmsg[MAXSTRMSG]="",*antinfo="",*rcvinfo="";
-    char *ant[]={"","",""},*rcv[]={"","",""};
-    int i,j,n=0,dispint=5000,trlevel=0,opts[]={10000,10000,2000,32768,10,0,30};
+    char *ant[]={"","",""},*rcv[]={"","",""},*logfile="";
+    int i,j,n=0,dispint=5000,trlevel=0,opts[]={10000,10000,2000,32768,10,0,30,0};
     int types[MAXSTR]={STR_FILE,STR_FILE},stat[MAXSTR]={0},byte[MAXSTR]={0};
     int bps[MAXSTR]={0},fmts[MAXSTR]={0},sta=0;
     
-    for (i=0;i<MAXSTR;i++) paths[i]=s[i];
-    
+    for (i=0;i<MAXSTR;i++) {
+        paths[i]=s[i];
+        cmds[i]=cmd_strs[i];
+        cmds_periodic[i]=cmd_periodic_strs[i];
+    }
     for (i=1;i<argc;i++) {
         if (!strcmp(argv[i],"-in")&&i+1<argc) {
             if (!decodepath(argv[++i],types,paths[0],fmts)) return -1;
@@ -234,11 +267,18 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i],"-r"  )&&i+1<argc) opts[1]=atoi(argv[++i]);
         else if (!strcmp(argv[i],"-n"  )&&i+1<argc) opts[5]=atoi(argv[++i]);
         else if (!strcmp(argv[i],"-f"  )&&i+1<argc) opts[6]=atoi(argv[++i]);
-        else if (!strcmp(argv[i],"-c"  )&&i+1<argc) cmdfile=argv[++i];
+        else if (!strcmp(argv[i],"-c"  )&&i+1<argc) cmdfile[0]=argv[++i];
+        else if (!strcmp(argv[i],"-c1" )&&i+1<argc) cmdfile[1]=argv[++i];
+        else if (!strcmp(argv[i],"-c2" )&&i+1<argc) cmdfile[2]=argv[++i];
+        else if (!strcmp(argv[i],"-c3" )&&i+1<argc) cmdfile[3]=argv[++i];
+        else if (!strcmp(argv[i],"-c4" )&&i+1<argc) cmdfile[4]=argv[++i];
         else if (!strcmp(argv[i],"-a"  )&&i+1<argc) antinfo=argv[++i];
         else if (!strcmp(argv[i],"-i"  )&&i+1<argc) rcvinfo=argv[++i];
         else if (!strcmp(argv[i],"-l"  )&&i+1<argc) local=argv[++i];
         else if (!strcmp(argv[i],"-x"  )&&i+1<argc) proxy=argv[++i];
+        else if (!strcmp(argv[i],"-b"  )&&i+1<argc) opts[7]=atoi(argv[++i]);
+        else if (!strcmp(argv[i],"-ft" )&&i+1<argc) strcpy(srctbl,argv[++i]);
+        else if (!strcmp(argv[i],"-fl" )&&i+1<argc) logfile=argv[++i];
         else if (!strcmp(argv[i],"-t"  )&&i+1<argc) trlevel=atoi(argv[++i]);
         else if (*argv[i]=='-') printhelp();
     }
@@ -279,7 +319,7 @@ int main(int argc, char **argv)
     strsvrinit(&strsvr,n+1);
     
     if (trlevel>0) {
-        traceopen(TRFILE);
+        traceopen(*logfile?logfile:TRFILE);
         tracelevel(trlevel);
     }
     fprintf(stderr,"stream server start\n");
@@ -287,12 +327,19 @@ int main(int argc, char **argv)
     strsetdir(local);
     strsetproxy(proxy);
     
-    if (*cmdfile) readcmd(cmdfile,cmd,0);
-    
+    for (i=0;i<MAXSTR;i++) {
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i],0);
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds_periodic[i],2);
+    }
     /* start stream server */
-    if (!strsvrstart(&strsvr,opts,types,paths,conv,*cmd?cmd:NULL,stapos)) {
+    if (!strsvrstart(&strsvr,opts,types,paths,conv,cmds,cmds_periodic,stapos)) {
         fprintf(stderr,"stream server start error\n");
         return -1;
+    }
+    /* read and set ntrip source table */
+    if (*srctbl) {
+        strsvrsetsrctbl(&strsvr,srctbl);
+        signal(SIGUSR2,reload_srctbl);
     }
     for (intrflg=0;!intrflg;) {
         
@@ -307,10 +354,11 @@ int main(int argc, char **argv)
         
         sleepms(dispint);
     }
-    if (*cmdfile) readcmd(cmdfile,cmd,1);
-    
+    for (i=0;i<MAXSTR;i++) {
+        if (*cmdfile[i]) readcmd(cmdfile[i],cmds[i],1);
+    }
     /* stop stream server */
-    strsvrstop(&strsvr,*cmd?cmd:NULL);
+    strsvrstop(&strsvr,cmds);
     
     for (i=0;i<n;i++) {
         strconvfree(conv[i]);

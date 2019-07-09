@@ -6,8 +6,11 @@
 #include <mshtml.h>
 #include "rtklib.h"
 #include "gmview.h"
+#include "plotmain.h"
 
-#define RTKLIB_GM_FILE L"rtkplot_gm.htm"
+#define RTKLIB_GM_TEMP "rtkplot_gm.htm"
+#define RTKLIB_GM_FILE "rtkplot_gm_a.htm"
+#define URL_GM_API     "http://maps.google.com/maps/api/js"
 
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
@@ -22,36 +25,64 @@ __fastcall TGoogleMapView::TGoogleMapView(TComponent* Owner)
 	State=0;
 	Lat=Lon=0.0;
 	Zoom=2;
+    FixCent=1;
+    WebCreate=0;
 }
 //---------------------------------------------------------------------------
-void __fastcall TGoogleMapView::FormCreate(TObject *Sender)
+void __fastcall TGoogleMapView::FormShow(TObject *Sender)
 {
-    UnicodeString url,exe,dir=L".";
-    wchar_t *p,*q;
+    UnicodeString url;
+    AnsiString exe,dir=".",infile,outfile;
+    FILE *infp, *outfp;
+    char *p,*q,*key=Plot->ApiKey.c_str(),buff[1024];
     
+    if (WebCreate) {
+        return;
+    }
     exe=Application->ExeName; // exe directory
     p=exe.c_str();
-    if ((q=wcsrchr(p,L'\\'))) {
+    if ((q=strrchr(p,'\\'))) {
         dir=exe.SubString(1,q-p);
     }
-    url=L"file://"+dir+L"\\"+RTKLIB_GM_FILE;
+    infile=dir+"\\"+RTKLIB_GM_TEMP;
+    outfile=dir+"\\"+RTKLIB_GM_FILE;
+    
+    if (!(infp=fopen(infile.c_str(),"r"))) {
+        return;
+    }
+    if (!(outfp=fopen(outfile.c_str(),"w"))) {
+        fclose(infp);
+        return;
+    }
+    while (fgets(buff,sizeof(buff),infp)) {
+        
+        if (*key&&(p=strstr(buff,URL_GM_API))) {
+            p+=strlen(URL_GM_API);
+            *p++='\0';
+            fprintf(outfp,"%s?key=%s&%s",buff,key,p);
+        }
+        else {
+            fputs(buff,outfp);
+        }
+    }
+    fclose(infp);
+    fclose(outfp);
+    
+    url="file://"+outfile;
     
     WebBrowser->Navigate(url.c_str());
     
     Timer1->Enabled=true;
-}
-//---------------------------------------------------------------------------
-void __fastcall TGoogleMapView::BtnCloseClick(TObject *Sender)
-{
-    Close();
+    
+    WebCreate=1;
 }
 //---------------------------------------------------------------------------
 void __fastcall TGoogleMapView::Timer1Timer(TObject *Sender)
 {
 	if (!GetState()) return;
 	
+	State=1;
 	SetView(Lat,Lon,Zoom);
-	
 	AddMark(0.0,0.0,"SOL1","SOLUTION 1");
 	AddMark(0.0,0.0,"SOL2","SOLUTION 2");
 	HideMark(1);
@@ -60,18 +91,48 @@ void __fastcall TGoogleMapView::Timer1Timer(TObject *Sender)
 	Timer1->Enabled=false;
 }
 //---------------------------------------------------------------------------
+void __fastcall TGoogleMapView::BtnCloseClick(TObject *Sender)
+{
+trace(2,"gmview close\n");
+    Close();
+}
+//---------------------------------------------------------------------------
+void __fastcall TGoogleMapView::BtnShrinkClick(TObject *Sender)
+{
+	SetZoom(Zoom-1);
+}
+//---------------------------------------------------------------------------
+void __fastcall TGoogleMapView::BtnExpandClick(TObject *Sender)
+{
+	SetZoom(Zoom+1);
+}
+//---------------------------------------------------------------------------
+void __fastcall TGoogleMapView::BtnFixCentClick(TObject *Sender)
+{
+    FixCent=BtnFixCent->Down;
+	if (FixCent) SetCent(Lat,Lon);
+}
+//---------------------------------------------------------------------------
+void __fastcall TGoogleMapView::FormResize(TObject *Sender)
+{
+	if (FixCent) SetCent(Lat,Lon);
+}
+//---------------------------------------------------------------------------
 void __fastcall TGoogleMapView::SetView(double lat, double lon, int zoom)
 {
     AnsiString f;
-	Lat=lat; Lon=lon; Zoom=zoom;
+	Lat=lat;
+	Lon=lon;
+	Zoom=zoom;
     ExecFunc(f.sprintf("SetView(%.9f,%.9f,%d)",lat,lon,zoom));
 }
 //---------------------------------------------------------------------------
 void __fastcall TGoogleMapView::SetCent(double lat, double lon)
 {
     AnsiString f;
-	Lat=lat; Lon=lon;
-    ExecFunc(f.sprintf("SetCent(%.9f,%.9f)",lat,lon));
+    Lat=lat;
+    Lon=lon;
+    if (FixCent) ExecFunc(f.sprintf("SetCent(%.9f,%.9f)",lat,lon));
 }
 //---------------------------------------------------------------------------
 void __fastcall TGoogleMapView::SetZoom(int zoom)
@@ -99,10 +160,6 @@ void __fastcall TGoogleMapView::SetMark(int index, const double *pos)
     AnsiString f,title;
     title.sprintf("SOL%d",index);
     ExecFunc(f.sprintf("PosMark(%.9f,%.9f,\"%s\")",pos[0]*R2D,pos[1]*R2D,title));
-	
-    if (BtnFixCent->Down) {
-		SetCent(pos[0]*R2D,pos[1]*R2D);
-    }
 	MarkPos[index-1][0]=pos[0]*R2D;
 	MarkPos[index-1][1]=pos[1]*R2D;
 }
@@ -126,7 +183,7 @@ int __fastcall TGoogleMapView::GetState(void)
 	IHTMLDocument3 *doc=NULL;
 	IHTMLElement *ele1=NULL;
 	VARIANT var;
-	int state;
+	int state=0;
 	
 	if (!WebBrowser->Document) return 0;
 	WebBrowser->Document->QueryInterface(IID_IHTMLDocument3,(void **)&doc);
@@ -153,7 +210,7 @@ void __fastcall TGoogleMapView::ExecFunc(AnsiString func)
     HRESULT hr;
     wchar_t func_w[1024]={0};
     
-    if (!WebBrowser->Document) return;
+    if (!State||!WebBrowser->Document) return;
     WebBrowser->Document->QueryInterface(IID_IHTMLDocument2,(void **)&doc);
     if (!doc) return;
     hr=doc->get_parentWindow(&win);
@@ -166,29 +223,8 @@ void __fastcall TGoogleMapView::ExecFunc(AnsiString func)
     VariantClear(&var);
 }
 //---------------------------------------------------------------------------
-void __fastcall TGoogleMapView::BtnShrinkClick(TObject *Sender)
+void __fastcall TGoogleMapView::FormCreate(TObject *Sender)
 {
-	SetZoom(Zoom-1);
-}
-//---------------------------------------------------------------------------
-
-void __fastcall TGoogleMapView::BtnExpandClick(TObject *Sender)
-{
-	SetZoom(Zoom+1);
-}
-//---------------------------------------------------------------------------
-void __fastcall TGoogleMapView::BtnFixCentClick(TObject *Sender)
-{
-	if (BtnFixCent->Down&&MarkPos[0][0]!=0.0&&MarkPos[0][1]!=0.0) {
-		SetCent(MarkPos[0][0],MarkPos[0][1]);
-	}
-}
-//---------------------------------------------------------------------------
-void __fastcall TGoogleMapView::FormResize(TObject *Sender)
-{
-	if (BtnFixCent->Down&&MarkPos[0][0]!=0.0&&MarkPos[0][1]!=0.0) {
-		SetCent(MarkPos[0][0],MarkPos[0][1]);
-	}
 }
 //---------------------------------------------------------------------------
 

@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * rcvraw.c : receiver raw data functions
 *
-*          Copyright (C) 2009-2016 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2009-2018 by T.TAKASU, All rights reserved.
 *          Copyright (C) 2014 by T.SUZUKI, All rights reserved.
 *
 * references :
@@ -14,7 +14,7 @@
 *     [4] Quasi-Zenith Satellite System Navigation Service Interface
 *         Specification for QZSS (IS-QZSS) V.1.5, March 27, 2014
 *     [5] European GNSS (Galileo) Open Service Signal In Space Interface Control
-*         Document, Issue 1.2, November 2015
+*         Document, Issue 1.3, December, 2016
 *
 * version : $Revision: 1.1 $ $Date: 2008/07/17 21:48:06 $
 * history : 2009/04/10 1.0  new
@@ -32,11 +32,13 @@
 *           2014/11/07 1.10 support qzss navigation subframes
 *           2016/01/23 1.11 enable septentrio
 *           2016/01/28 1.12 add decode_gal_inav() for galileo I/NAV
+*           2016/07/04 1.13 support CMR/CMR+
+*           2017/05/26 1.14 support TERSUS
+*           2018/10/10 1.15 update reference [5]
+*                           add set of eph->code/flag for galileo and beidou
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 #include <stdint.h>
-
-static const char rcsid[]="$Id:$";
 
 #define P2_34       5.820766091346740E-11 /* 2^-34 */
 #define P2_46       1.421085471520200E-14 /* 2^-46 */
@@ -107,7 +109,7 @@ extern int decode_gal_inav(const unsigned char *buff, eph_t *eph)
     i=0; /* word type 0 */
     type[0]    =getbitu(buff,i, 6);              i+= 6;
     time_f     =getbitu(buff,i, 2);              i+= 2+88;
-    week       =getbitu(buff,i,12);              i+=12;
+    week       =getbitu(buff,i,12);              i+=12; /* gst-week */
     tow        =getbitu(buff,i,20);
     
     i=128; /* word type 1 */
@@ -188,8 +190,7 @@ extern int decode_gal_inav(const unsigned char *buff, eph_t *eph)
     eph->toe=gst2time(week,eph->toes);
     eph->toc=gst2time(week,toc);
     eph->week=week+1024; /* gal-week = gst-week + 1024 */
-    eph->code=1;         /* data source = I/NAV E1B */
-    
+    eph->code =(1<<0)|(1<<9); /* data source = i/nav e1b, af0-2,toc,sisa for e5b-e1 */
     return 1;
 }
 /* decode BeiDou D1 ephemeris --------------------------------------------------
@@ -269,6 +270,8 @@ extern int decode_bds_d1(const unsigned char *buff, eph_t *eph)
     else if (eph->toes<sow1-302400.0) eph->week--;
     eph->toe=bdt2gpst(bdt2time(eph->week,eph->toes)); /* bdt -> gpst */
     eph->toc=bdt2gpst(bdt2time(eph->week,toc_bds));   /* bdt -> gpst */
+    eph->code=0; /* data source = unknown */
+    eph->flag=1; /* nav type = IGSO/MEO */
     return 1;
 }
 /* decode BeiDou D2 ephemeris --------------------------------------------------
@@ -392,6 +395,8 @@ extern int decode_bds_d2(const unsigned char *buff, eph_t *eph)
     else if (eph->toes<sow1-302400.0) eph->week--;
     eph->toe=bdt2gpst(bdt2time(eph->week,eph->toes)); /* bdt -> gpst */
     eph->toc=bdt2gpst(bdt2time(eph->week,toc_bds));   /* bdt -> gpst */
+    eph->code=0; /* data source = unknown */
+    eph->flag=2; /* nav type = GEO */
     return 1;
 }
 /* test hamming code of glonass ephemeris string -------------------------------
@@ -658,12 +663,14 @@ static void decode_gps_subfrm4(const unsigned char *buff, alm_t *alm,
         /* decode as and sv config */
         i=56;
         for (sat=1;sat<=32;sat++) {
-            if (alm) alm[sat-1].svconf=getbitu(buff,i,4); i+=4;
+            if (alm) alm[sat-1].svconf=getbitu(buff,i,4);
+            i+=4;
         }
         /* decode sv health */
         i=186;
         for (sat=25;sat<=32;sat++) {
-            if (alm) alm[sat-1].svh   =getbitu(buff,i,6); i+=6;
+            if (alm) alm[sat-1].svh   =getbitu(buff,i,6);
+            i+=6;
         }
     }
     else if (svid==56) { /* page 18 */
@@ -845,9 +852,10 @@ extern int decode_frame(const unsigned char *buff, eph_t *eph, alm_t *alm,
 * initialize receiver raw data control struct and reallocate obsevation and
 * epheris buffer
 * args   : raw_t  *raw   IO     receiver raw data control struct
+*          int    format I      stream format (STRFMT_???)
 * return : status (1:ok,0:memory allocation error)
 *-----------------------------------------------------------------------------*/
-extern int init_raw(raw_t *raw)
+extern int init_raw(raw_t *raw, int format)
 {
     const double lam_glo[NFREQ]={CLIGHT/FREQ1_GLO,CLIGHT/FREQ2_GLO};
     gtime_t time0={0};
@@ -858,18 +866,21 @@ extern int init_raw(raw_t *raw)
     seph_t seph0={0};
     sbsmsg_t sbsmsg0={0};
     lexmsg_t lexmsg0={0};
-    int i,j,sys;
+    int i,j,sys,ret=1;
     
-    trace(3,"init_raw:\n");
+    trace(3,"init_raw: format=%d\n",format);
     
-    raw->time=raw->tobs=time0;
+    raw->time=time0;
     raw->ephsat=0;
     raw->sbsmsg=sbsmsg0;
     raw->msgtype[0]='\0';
     for (i=0;i<MAXSAT;i++) {
-        for (j=0;j<380  ;j++) raw->subfrm[i][j]=0;
-        for (j=0;j<NFREQ;j++) raw->lockt[i][j]=0.0;
-        for (j=0;j<NFREQ;j++) raw->halfc[i][j]=0;
+        for (j=0;j<380;j++) raw->subfrm[i][j]=0;
+        for (j=0;j<NFREQ+NEXOBS;j++) {
+            raw->tobs [i][j]=time0;
+            raw->lockt[i][j]=0.0;
+            raw->halfc[i][j]=0;
+        }
         raw->icpp[i]=raw->off[i]=raw->prCA[i]=raw->dpCA[i]=0.0;
     }
     for (i=0;i<MAXOBS;i++) raw->freqn[i]=0;
@@ -880,9 +891,7 @@ extern int init_raw(raw_t *raw)
     raw->tod=-1;
     for (i=0;i<MAXRAWLEN;i++) raw->buff[i]=0;
     raw->opt[0]='\0';
-    raw->receive_time=0.0;
-    raw->plen=raw->pbyte=raw->page=raw->reply=0;
-    raw->week=0;
+    raw->format=-1;
     
     raw->obs.data =NULL;
     raw->obuf.data=NULL;
@@ -890,6 +899,8 @@ extern int init_raw(raw_t *raw)
     raw->nav.alm  =NULL;
     raw->nav.geph =NULL;
     raw->nav.seph =NULL;
+    raw->half_cyc =NULL;
+    raw->rcv_data =NULL;
     
     if (!(raw->obs.data =(obsd_t *)malloc(sizeof(obsd_t)*MAXOBS))||
         !(raw->obuf.data=(obsd_t *)malloc(sizeof(obsd_t)*MAXOBS))||
@@ -924,6 +935,17 @@ extern int init_raw(raw_t *raw)
         raw->sta.pos[i]=raw->sta.del[i]=0.0;
     }
     raw->sta.hgt=0.0;
+    
+    /* initialize receiver dependent data */
+    raw->format=format;
+    switch (format) {
+        case STRFMT_CMR : ret=init_cmr (raw); break;
+        case STRFMT_RT17: ret=init_rt17(raw); break;
+    }
+    if (!ret) {
+        free_raw(raw);
+        return 0;
+    }
     return 1;
 }
 /* free receiver raw data control ----------------------------------------------
@@ -933,6 +955,8 @@ extern int init_raw(raw_t *raw)
 *-----------------------------------------------------------------------------*/
 extern void free_raw(raw_t *raw)
 {
+    half_cyc_t *p,*next;
+    
     trace(3,"free_raw:\n");
     
     free(raw->obs.data ); raw->obs.data =NULL; raw->obs.n =0;
@@ -941,6 +965,20 @@ extern void free_raw(raw_t *raw)
     free(raw->nav.alm  ); raw->nav.alm  =NULL; raw->nav.na=0;
     free(raw->nav.geph ); raw->nav.geph =NULL; raw->nav.ng=0;
     free(raw->nav.seph ); raw->nav.seph =NULL; raw->nav.ns=0;
+    
+    /* free half-cycle correction list */
+    for (p=raw->half_cyc;p;p=next) {
+        next=p->next;
+        free(p);
+    }
+    raw->half_cyc=NULL;
+    
+    /* free receiver dependent data */
+    switch (raw->format) {
+        case STRFMT_CMR : free_cmr (raw); break;
+        case STRFMT_RT17: free_rt17(raw); break;
+    }
+    raw->rcv_data=NULL;
 }
 /* input receiver raw data from stream -----------------------------------------
 * fetch next receiver raw data and input a message from stream
@@ -957,9 +995,9 @@ extern int input_raw(raw_t *raw, int format, unsigned char data)
     
     switch (format) {
         case STRFMT_OEM4 : return input_oem4 (raw,data);
-        case STRFMT_OEM3 : return input_oem3 (raw,data);
+        case STRFMT_CNAV : return input_cnav (raw,data);
         case STRFMT_UBX  : return input_ubx  (raw,data);
-        case STRFMT_SS2  : return input_ss2  (raw,data);
+        case STRFMT_SBP  : return input_sbp  (raw,data);
         case STRFMT_CRES : return input_cres (raw,data);
         case STRFMT_STQ  : return input_stq  (raw,data);
         case STRFMT_GW10 : return input_gw10 (raw,data);
@@ -968,6 +1006,8 @@ extern int input_raw(raw_t *raw, int format, unsigned char data)
         case STRFMT_BINEX: return input_bnx  (raw,data);
         case STRFMT_RT17 : return input_rt17 (raw,data);
         case STRFMT_SEPT : return input_sbf  (raw,data);
+        case STRFMT_CMR  : return input_cmr  (raw,data);
+        case STRFMT_TERSUS: return input_tersus(raw,data);
         case STRFMT_LEXR : return input_lexr (raw,data);
     }
     return 0;
@@ -985,9 +1025,9 @@ extern int input_rawf(raw_t *raw, int format, FILE *fp)
     
     switch (format) {
         case STRFMT_OEM4 : return input_oem4f (raw,fp);
-        case STRFMT_OEM3 : return input_oem3f (raw,fp);
+        case STRFMT_CNAV : return input_cnavf (raw,fp);
         case STRFMT_UBX  : return input_ubxf  (raw,fp);
-        case STRFMT_SS2  : return input_ss2f  (raw,fp);
+        case STRFMT_SBP  : return input_sbpf  (raw,fp);
         case STRFMT_CRES : return input_cresf (raw,fp);
         case STRFMT_STQ  : return input_stqf  (raw,fp);
         case STRFMT_GW10 : return input_gw10f (raw,fp);
@@ -996,6 +1036,8 @@ extern int input_rawf(raw_t *raw, int format, FILE *fp)
         case STRFMT_BINEX: return input_bnxf  (raw,fp);
         case STRFMT_RT17 : return input_rt17f (raw,fp);
         case STRFMT_SEPT : return input_sbff  (raw,fp);
+        case STRFMT_CMR  : return input_cmrf  (raw,fp);
+        case STRFMT_TERSUS: return input_tersusf(raw,fp);
         case STRFMT_LEXR : return input_lexrf (raw,fp);
     }
     return -2;

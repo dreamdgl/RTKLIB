@@ -7,18 +7,23 @@ BINDIR = /usr/local/bin
 SRC    = ../../../src
 
 INCLUDE= -I$(SRC)
-OPTIONS= -DTRACE -DENAGLO -DENAQZS -DENAGAL -DENACMP -DNFREQ=6 -DNEXOBS=3
+OPTIONS= -DTRACE -DENAGLO -DENAQZS -DENAGAL -DENACMP -DENAIRN -DNFREQ=4 -DNEXOBS=3
 
 CFLAGS = -O3 -ansi -pedantic -Wall -Wno-unused-but-set-variable $(INCLUDE) $(OPTIONS) -g
 
-LDLIBS = -lm -lrt
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S), Darwin)
+	LDLIBS  = -lm
+else
+	LDLIBS  = -lm -lrt
+endif
 
 all  : convbin
 
 convbin    : convbin.o rtkcmn.o rinex.o sbas.o preceph.o rcvraw.o convrnx.o
 convbin    : rtcm.o rtcm2.o rtcm3.o rtcm3e.o pntpos.o ephemeris.o ionex.o
-convbin    : novatel.o ss2.o ublox.o crescent.o skytraq.o gw10.o javad.o nvs.o
-convbin    : binex.o rt17.o qzslex.o septentrio.o
+convbin    : novatel.o swiftnav.o tersus.o comnav.o ublox.o crescent.o skytraq.o gw10.o javad.o nvs.o
+convbin    : binex.o rt17.o qzslex.o septentrio.o cmr.o
 
 convbin.o  : ../convbin.c
 	$(CC) -c $(CFLAGS) ../convbin.c
@@ -50,8 +55,8 @@ ephemeris.o: $(SRC)/ephemeris.c
 	$(CC) -c $(CFLAGS) $(SRC)/ephemeris.c
 novatel.o  : $(SRC)/rcv/novatel.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/novatel.c
-ss2.o      : $(SRC)/rcv/ss2.c
-	$(CC) -c $(CFLAGS) $(SRC)/rcv/ss2.c
+swiftnav.o : $(SRC)/rcv/swiftnav.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/swiftnav.c
 ublox.o    : $(SRC)/rcv/ublox.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/ublox.c
 crescent.o : $(SRC)/rcv/crescent.c
@@ -72,6 +77,12 @@ qzslex.o   : $(SRC)/qzslex.c
 	$(CC) -c $(CFLAGS) $(SRC)/qzslex.c
 septentrio.o: $(SRC)/rcv/septentrio.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/septentrio.c
+cmr.o      : $(SRC)/rcv/cmr.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/cmr.c
+tersus.o   : $(SRC)/rcv/tersus.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/tersus.c
+comnav.o   : $(SRC)/rcv/comnav.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/comnav.c
 
 convbin.o  : $(SRC)/rtklib.h
 rtkcmn.o   : $(SRC)/rtklib.h
@@ -88,7 +99,7 @@ pntpos.o   : $(SRC)/rtklib.h
 ephemeris.o: $(SRC)/rtklib.h
 ionex.o    : $(SRC)/rtklib.h
 novatel.o  : $(SRC)/rtklib.h
-ss2.o      : $(SRC)/rtklib.h
+swiftnav.o : $(SRC)/rtklib.h
 ublox.o    : $(SRC)/rtklib.h
 crescent.o : $(SRC)/rtklib.h
 skytraq.o  : $(SRC)/rtklib.h
@@ -99,6 +110,9 @@ binex.o    : $(SRC)/rtklib.h
 rt17.o     : $(SRC)/rtklib.h
 qzslex.o   : $(SRC)/rtklib.h
 septentrio.o: $(SRC)/rtklib.h
+cmr.o      : $(SRC)/rtklib.h
+tersus.o   : $(SRC)/rtklib.h
+comnav.o   : $(SRC)/rtklib.h
 
 DATDIR = ../../../test/data/rcvraw
 
@@ -148,5 +162,3 @@ test18:
 test21:
 	stty raw < /dev/ttyACM0
 	./convbin -r ubx -o ubx.obs -n ubx.nav -s ubx.sbs -h ubx.hnav /dev/ttyACM0
-
-

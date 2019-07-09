@@ -113,8 +113,22 @@
 *           2016/01/23 1.33 enable septentrio
 *           2016/02/05 1.34 support GLONASS for savenav(), loadnav()
 *           2016/06/11 1.35 delete trace() in reppath() to avoid deadlock
+*           2016/07/01 1.36 support IRNSS
+*                           add leap second before 2017/1/1 00:00:00
+*           2016/07/29 1.37 rename api compress() -> rtk_uncompress()
+*                           rename api crc16()    -> rtk_crc16()
+*                           rename api crc24q()   -> rtk_crc24q()
+*                           rename api crc32()    -> rtk_crc32()
+*           2016/08/20 1.38 fix type incompatibility in win64 environment
+*                           change constant _POSIX_C_SOURCE 199309 -> 199506
+*           2016/08/21 1.39 fix bug on week overflow in time2gpst()/gpst2time()
+*           2016/09/05 1.40 fix bug on invalid nav data read in readnav()
+*           2016/09/17 1.41 suppress warnings
+*           2016/09/19 1.42 modify api deg2dms() to consider numerical error
+*           2017/04/11 1.43 delete EXPORT for global variables
+*           2018/10/10 1.44 modify api satexclude()
 *-----------------------------------------------------------------------------*/
-#define _POSIX_C_SOURCE 199309
+#define _POSIX_C_SOURCE 199506
 #include <stdarg.h>
 #include <ctype.h>
 #ifndef WIN32
@@ -126,18 +140,20 @@
 #endif
 #include "rtklib.h"
 
-static const char rcsid[]="$Id: rtkcmn.c,v 1.1 2008/07/17 21:48:06 ttaka Exp ttaka $";
-
 /* constants -----------------------------------------------------------------*/
 
 #define POLYCRC32   0xEDB88320u /* CRC32 polynomial */
 #define POLYCRC24Q  0x1864CFBu  /* CRC24Q polynomial */
 
-const static double gpst0[]={1980,1, 6,0,0,0}; /* gps time reference */
-const static double gst0 []={1999,8,22,0,0,0}; /* galileo system time reference */
-const static double bdt0 []={2006,1, 1,0,0,0}; /* beidou time reference */
+#define SQR(x)      ((x)*(x))
+#define MAX_VAR_EPH SQR(300.0)  /* max variance eph to reject satellite (m^2) */
+
+static const double gpst0[]={1980,1, 6,0,0,0}; /* gps time reference */
+static const double gst0 []={1999,8,22,0,0,0}; /* galileo system time reference */
+static const double bdt0 []={2006,1, 1,0,0,0}; /* beidou time reference */
 
 static double leaps[MAXLEAPS+1][7]={ /* leap seconds (y,m,d,h,m,s,utc-gpst) */
+    {2017,1,1,0,0,0,-18},
     {2015,7,1,0,0,0,-17},
     {2012,7,1,0,0,0,-16},
     {2009,1,1,0,0,0,-15},
@@ -157,7 +173,7 @@ static double leaps[MAXLEAPS+1][7]={ /* leap seconds (y,m,d,h,m,s,utc-gpst) */
     {1981,7,1,0,0,0, -1},
     {0}
 };
-EXPORT const double chisqr[100]={      /* chi-sqr(n) (alpha=0.001) */
+const double chisqr[100]={      /* chi-sqr(n) (alpha=0.001) */
     10.8,13.8,16.3,18.5,20.5,22.5,24.3,26.1,27.9,29.6,
     31.3,32.9,34.5,36.1,37.7,39.3,40.8,42.3,43.8,45.3,
     46.8,48.3,49.7,51.2,52.6,54.1,55.5,56.9,58.3,59.7,
@@ -169,43 +185,46 @@ EXPORT const double chisqr[100]={      /* chi-sqr(n) (alpha=0.001) */
     126 ,127 ,128 ,129 ,131 ,132 ,133 ,134 ,135 ,137 ,
     138 ,139 ,140 ,142 ,143 ,144 ,145 ,147 ,148 ,149
 };
-EXPORT const double lam_carr[MAXFREQ]={ /* carrier wave length (m) */
-    CLIGHT/FREQ1,CLIGHT/FREQ2,CLIGHT/FREQ5,CLIGHT/FREQ6,CLIGHT/FREQ7,CLIGHT/FREQ8
+const double lam_carr[MAXFREQ]={ /* carrier wave length (m) */
+    CLIGHT/FREQL1,CLIGHT/FREQL2,CLIGHT/FREQE5b,CLIGHT/FREQL5,CLIGHT/FREQE6,
+    CLIGHT/FREQE5ab,CLIGHT/FREQs
 };
-EXPORT const prcopt_t prcopt_default={ /* defaults processing options */
+const prcopt_t prcopt_default={ /* defaults processing options */
     PMODE_SINGLE,0,2,SYS_GPS,   /* mode,soltype,nf,navsys */
     15.0*D2R,{{0,0}},           /* elmin,snrmask */
-    0,1,1,1,1,0,                /* sateph,modear,glomodear,gpsmodear,bdsmodear,arfilter */
-    5,0,2,2,10,1,                   /* maxout,minlock,minfixsats,minfix,armaxiter */
-    0,0,0,0,                    /* estion,esttrop,dynamics,tidecorr */
+    0,3,3,1,0,1,                /* sateph,modear,glomodear,gpsmodear,bdsmodear,arfilter */
+    20,5,4,5,10,20,             /* maxout,minlock,minfixsats,minholdsats,mindropsats,minfix */
+    0,1,0,0,1,0,                /* rcvstds,armaxiter,estion,esttrop,dynamics,tidecorr */
     1,0,0,0,0,                  /* niter,codesmooth,intpref,sbascorr,sbassatsel */
     0,0,                        /* rovpos,refpos */
-    {100.0,100.0},              /* eratio[] */
-    {100.0,0.003,0.003,0.0,1.0}, /* err[] */
+    WEIGHTOPT_ELEVATION,        /* weightmode */
+    {300.0,300.0,300.0},        /* eratio[] */
+    {100.0,0.003,0.003,0.0,1.0,52.0}, /* err[] */
     {30.0,0.03,0.3},            /* std[] */
     {1E-4,1E-3,1E-4,1E-1,1E-2,0.0}, /* prn[] */
     5E-12,                      /* sclkstab */
-    {3.0,0.9999,0.25,0.1,0.05}, /* thresar */
-    0.0,0.0,0.05,               /* elmaskar,almaskhold,thresslip */
-    30.0,30.0,30.0,             /* maxtdif,maxinno,maxgdop */
+    {3.0,0.25,0.0,1E-9,1E-5,0.0,0.0,0.0}, /* thresar */
+    0.0,0.0,0.05,0.1,0.01,      /* elmaskar,elmaskhold,thresslip,varholdamb,gainholdamb */
+    30.0,1000.0,30.0,           /* maxtdif,maxinno,maxgdop */
     {0},{0},{0},                /* baseline,ru,rb */
     {"",""},                    /* anttype */
-    {{0}},{{0}},{0}             /* antdel,pcv,exsats */
+    {{0}},{{0}},{0},            /* antdel,pcv,exsats */
+    1,1                           /* maxaveep,initrst */
 };
-EXPORT const solopt_t solopt_default={ /* defaults solution output options */
+const solopt_t solopt_default={ /* defaults solution output options */
     SOLF_LLH,TIMES_GPST,1,3,    /* posf,times,timef,timeu */
-    0,1,0,0,0,0,                /* degf,outhead,outopt,datum,height,geoid */
+    0,1,0,0,0,0,0,              /* degf,outhead,outopt,outvel,datum,height,geoid */
     0,0,0,                      /* solstatic,sstat,trace */
     {0.0,0.0},                  /* nmeaintv */
     " ",""                      /* separator/program name */
 };
-EXPORT const char *formatstrs[32]={    /* stream format strings */
+const char *formatstrs[32]={    /* stream format strings */
     "RTCM 2",                   /*  0 */
     "RTCM 3",                   /*  1 */
     "NovAtel OEM6",             /*  2 */
-    "NovAtel OEM3",             /*  3 */
+    "ComNav",                   /*  3 */
     "u-blox",                   /*  4 */
-    "Superstar II",             /*  5 */
+    "Swift Navigation SBP",     /*  5 */
     "Hemisphere",               /*  6 */
     "SkyTraq",                  /*  7 */
     "GW10",                     /*  8 */
@@ -214,12 +233,14 @@ EXPORT const char *formatstrs[32]={    /* stream format strings */
     "BINEX",                    /* 11 */
     "Trimble RT17",             /* 12 */
     "Septentrio",               /* 13 */
-    "LEX Receiver",             /* 14 */
-    "RINEX",                    /* 15 */
-    "SP3",                      /* 16 */
-    "RINEX CLK",                /* 17 */
-    "SBAS",                     /* 18 */
-    "NMEA 0183",                /* 19 */
+    "CMR/CMR+",                 /* 14 */
+    "TERSUS",                   /* 15 */
+    "LEX Receiver",             /* 16 */
+    "RINEX",                    /* 17 */
+    "SP3",                      /* 18 */
+    "RINEX CLK",                /* 19 */
+    "SBAS",                     /* 20 */
+    "NMEA 0183",                /* 21 */
     NULL
 };
 static char *obscodes[]={       /* observation code strings */
@@ -228,25 +249,38 @@ static char *obscodes[]={       /* observation code strings */
     "1A","1B","1X","1Z","2C", "2D","2S","2L","2X","2P", /* 10-19 */
     "2W","2Y","2M","2N","5I", "5Q","5X","7I","7Q","7X", /* 20-29 */
     "6A","6B","6C","6X","6Z", "6S","6L","8L","8Q","8X", /* 30-39 */
-    "2I","2Q","6I","6Q","3I", "3Q","3X","1I","1Q",""    /* 40-49 */
+    "2I","2Q","6I","6Q","3I", "3Q","3X","1I","1Q","5A", /* 40-49 */
+    "5B","5C","9A","9B","9C", "9X",""  ,""  ,""  ,""    /* 50-59 */
 };
-static unsigned char obsfreqs[]={ /* 1:L1,2:L2,3:L5,4:L6,5:L7,6:L8,7:L3 */
-    
+static unsigned char obsfreqs[]={
+    /* 1:L1/E1, 2:L2, 3:E5b, 4:L5/E5a/L3, 5:E6/LEX, 6:E5(a+b), 7:S */
     0, 1, 1, 1, 1,  1, 1, 1, 1, 1, /*  0- 9 */
     1, 1, 1, 1, 2,  2, 2, 2, 2, 2, /* 10-19 */
-    2, 2, 2, 2, 3,  3, 3, 5, 5, 5, /* 20-29 */
-    4, 4, 4, 4, 4,  4, 4, 6, 6, 6, /* 30-39 */
-    2, 2, 4, 4, 3,  3, 3, 1, 1, 0  /* 40-49 */
+    2, 2, 2, 2, 4,  4, 4, 3, 3, 3, /* 20-29 */
+    5, 5, 5, 5, 5,  5, 5, 6, 6, 6, /* 30-39 */
+    1, 1, 3, 3, 4,  4, 4, 1, 1, 4, /* 40-49 */
+    4, 4, 7, 7, 7,  7, 0, 0, 0, 0  /* 50-59 */
 };
-static char codepris[6][MAXFREQ][16]={  /* code priority table */
-   
-   /* L1,G1E1a   L2,G2,B1     L5,G3,E5a L6,LEX,B3 E5a,B2    E5a+b */
-    {"CPYWMNSL","PYWCMNDSLX","IQX"     ,""       ,""       ,""   }, /* GPS */
-    {"PC"      ,"PC"        ,"IQX"     ,""       ,""       ,""   }, /* GLO */
-    {"CABXZ"   ,""          ,"IQX"     ,"ABCXZ"  ,"IQX"    ,"IQX"}, /* GAL */
-    {"CSLXZ"   ,"SLX"       ,"IQX"     ,"SLX"    ,""       ,""   }, /* QZS */
-    {"C"       ,""          ,"IQX"     ,""       ,""       ,""   }, /* SBS */
-    {"IQX"     ,"IQX"       ,"IQX"     ,"IQX"    ,"IQX"    ,""   }  /* BDS */
+static unsigned char obsfreqs_cmp[]={
+    /* 1:B1, 2:B2, 3:B3 */
+    0, 1, 1, 1, 1,  1, 1, 1, 1, 1, /*  0- 9 */
+    1, 1, 1, 1, 2,  2, 2, 2, 1, 2, /* 10-19 */
+    2, 2, 2, 2, 4,  4, 4, 2, 2, 2, /* 20-29 */
+    5, 5, 5, 3, 5,  5, 5, 6, 6, 6, /* 30-39 */
+    1, 1, 3, 3, 4,  4, 4, 1, 1, 4, /* 40-49 */
+    4, 4, 7, 7, 7,  7, 0, 0, 0, 0  /* 50-59 */
+};
+
+static char codepris[7][MAXFREQ][16]={  /* code priority table */
+
+   /* L1/E1/B1   L2/B2      E5b/B3  L5/E5a/L3 E6/LEX     E5(a+b)  S */
+    {"CPYWMNSL","CLPYWMNDSX","IQX"   ,"IQX"   ,""        ,""      ,""    }, /* GPS */
+    {"PC"      ,"PC"        ,"IQX"   ,"IQX"   ,""        ,""      ,""    }, /* GLO */
+    {"CABXZ"   ,""          ,"IQX"   ,"IQX"   ,"ABCXZ"   ,"IQX"   ,""    }, /* GAL */
+    {"CSLXZ"   ,"SLX"       ,"IQX"   ,"IQX"   ,"SLX"     ,""      ,""    }, /* QZS */
+    {"C"       ,""          ,"IQX"   ,"IQX"   ,""        ,""      ,""    }, /* SBS */
+    {"IQX"     ,"IQX"       ,"IQX"   ,"IQX"   ,"IQX"     ,""      ,""    }, /* BDS */
+    {""        ,""          ,"ABCX"  ,"ABCX"  ,""        ,""      ,"ABCX"}  /* IRN */
 };
 static fatalfunc_t *fatalfunc=NULL; /* fatal callback function */
 
@@ -319,6 +353,14 @@ static const unsigned int tbl_CRC24Q[]={
     0xE37B16,0x6537ED,0x69AE1B,0xEFE2E0,0x709DF7,0xF6D10C,0xFA48FA,0x7C0401,
     0x42FA2F,0xC4B6D4,0xC82F22,0x4E63D9,0xD11CCE,0x575035,0x5BC9C3,0xDD8538
 };
+const double ura_value[]={              /* ura max values */
+    2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
+    3072.0,6144.0
+};
+static const double ura_nominal[]={     /* ura nominal values */
+    2.0,2.8,4.0,5.7,8.0,11.3,16.0,32.0,64.0,128.0,256.0,512.0,1024.0,
+    2048.0,4096.0,8192.0
+};
 /* function prototypes -------------------------------------------------------*/
 #ifdef MKL
 #define LAPACK
@@ -386,12 +428,17 @@ extern int satno(int sys, int prn)
         case SYS_CMP:
             if (prn<MINPRNCMP||MAXPRNCMP<prn) return 0;
             return NSATGPS+NSATGLO+NSATGAL+NSATQZS+prn-MINPRNCMP+1;
+        case SYS_IRN:
+            if (prn<MINPRNIRN||MAXPRNIRN<prn) return 0;
+            return NSATGPS+NSATGLO+NSATGAL+NSATQZS+NSATCMP+prn-MINPRNIRN+1;
         case SYS_LEO:
             if (prn<MINPRNLEO||MAXPRNLEO<prn) return 0;
-            return NSATGPS+NSATGLO+NSATGAL+NSATQZS+NSATCMP+prn-MINPRNLEO+1;
+            return NSATGPS+NSATGLO+NSATGAL+NSATQZS+NSATCMP+NSATIRN+
+                   prn-MINPRNLEO+1;
         case SYS_SBS:
             if (prn<MINPRNSBS||MAXPRNSBS<prn) return 0;
-            return NSATGPS+NSATGLO+NSATGAL+NSATQZS+NSATCMP+NSATLEO+prn-MINPRNSBS+1;
+            return NSATGPS+NSATGLO+NSATGAL+NSATQZS+NSATCMP+NSATIRN+NSATLEO+
+                   prn-MINPRNSBS+1;
     }
     return 0;
 }
@@ -420,7 +467,10 @@ extern int satsys(int sat, int *prn)
     else if ((sat-=NSATQZS)<=NSATCMP) {
         sys=SYS_CMP; sat+=MINPRNCMP-1; 
     }
-    else if ((sat-=NSATCMP)<=NSATLEO) {
+    else if ((sat-=NSATCMP)<=NSATIRN) {
+        sys=SYS_IRN; sat+=MINPRNIRN-1; 
+    }
+    else if ((sat-=NSATIRN)<=NSATLEO) {
         sys=SYS_LEO; sat+=MINPRNLEO-1; 
     }
     else if ((sat-=NSATLEO)<=NSATSBS) {
@@ -432,9 +482,9 @@ extern int satsys(int sat, int *prn)
 }
 /* satellite id to satellite number --------------------------------------------
 * convert satellite id to satellite number
-* args   : char   *id       I   satellite id (nn,Gnn,Rnn,Enn,Jnn,Cnn or Snn)
+* args   : char   *id       I   satellite id (nn,Gnn,Rnn,Enn,Jnn,Cnn,Inn or Snn)
 * return : satellite number (0: error)
-* notes  : 120-138 and 193-195 are also recognized as sbas and qzss
+* notes  : 120-142 and 193-199 are also recognized as sbas and qzss
 *-----------------------------------------------------------------------------*/
 extern int satid2no(const char *id)
 {
@@ -456,6 +506,7 @@ extern int satid2no(const char *id)
         case 'E': sys=SYS_GAL; prn+=MINPRNGAL-1; break;
         case 'J': sys=SYS_QZS; prn+=MINPRNQZS-1; break;
         case 'C': sys=SYS_CMP; prn+=MINPRNCMP-1; break;
+        case 'I': sys=SYS_IRN; prn+=MINPRNIRN-1; break;
         case 'L': sys=SYS_LEO; prn+=MINPRNLEO-1; break;
         case 'S': sys=SYS_SBS; prn+=100; break;
         default: return 0;
@@ -465,7 +516,7 @@ extern int satid2no(const char *id)
 /* satellite number to satellite id --------------------------------------------
 * convert satellite number to satellite id
 * args   : int    sat       I   satellite number
-*          char   *id       O   satellite id (Gnn,Rnn,Enn,Jnn,Cnn or nnn)
+*          char   *id       O   satellite id (Gnn,Rnn,Enn,Jnn,Cnn,Inn or nnn)
 * return : none
 *-----------------------------------------------------------------------------*/
 extern void satno2id(int sat, char *id)
@@ -477,6 +528,7 @@ extern void satno2id(int sat, char *id)
         case SYS_GAL: sprintf(id,"E%02d",prn-MINPRNGAL+1); return;
         case SYS_QZS: sprintf(id,"J%02d",prn-MINPRNQZS+1); return;
         case SYS_CMP: sprintf(id,"C%02d",prn-MINPRNCMP+1); return;
+        case SYS_IRN: sprintf(id,"I%02d",prn-MINPRNIRN+1); return;
         case SYS_LEO: sprintf(id,"L%02d",prn-MINPRNLEO+1); return;
         case SYS_SBS: sprintf(id,"%03d" ,prn); return;
     }
@@ -485,11 +537,12 @@ extern void satno2id(int sat, char *id)
 /* test excluded satellite -----------------------------------------------------
 * test excluded satellite
 * args   : int    sat       I   satellite number
+*          double var       I   variance of ephemeris (m^2)
 *          int    svh       I   sv health flag
 *          prcopt_t *opt    I   processing options (NULL: not used)
 * return : status (1:excluded,0:not excluded)
 *-----------------------------------------------------------------------------*/
-extern int satexclude(int sat, int svh, const prcopt_t *opt)
+extern int satexclude(int sat, double var, int svh, const prcopt_t *opt)
 {
     int sys=satsys(sat,NULL);
     
@@ -503,6 +556,10 @@ extern int satexclude(int sat, int svh, const prcopt_t *opt)
     if (sys==SYS_QZS) svh&=0xFE; /* mask QZSS LEX health */
     if (svh) {
         trace(3,"unhealthy satellite: sat=%3d svh=%02X\n",sat,svh);
+        return 1;
+    }
+    if (var>MAX_VAR_EPH) {
+        trace(3,"invalid ura satellite: sat=%3d ura=%.2f\n",sat,sqrt(var));
         return 1;
     }
     return 0;
@@ -522,7 +579,7 @@ extern int testsnr(int base, int freq, double el, double snr,
     double minsnr,a;
     int i;
     
-    if (!mask->ena[base]||freq<0||freq>=NFREQ) return 0;
+    if (!mask->ena[base]||freq<0||freq>=NFREQ||snr==0) return 0;
     
     a=(el*R2D+5.0)/10.0;
     i=(int)floor(a); a-=i;
@@ -540,13 +597,19 @@ extern int testsnr(int base, int freq, double el, double snr,
 * return : obs code (CODE_???)
 * notes  : obs codes are based on reference [6] and qzss extension
 *-----------------------------------------------------------------------------*/
-extern unsigned char obs2code(const char *obs, int *freq)
+extern unsigned char obs2code(int sys, const char *obs, int *freq)
 {
     int i;
     if (freq) *freq=0;
     for (i=1;*obscodes[i];i++) {
         if (strcmp(obscodes[i],obs)) continue;
-        if (freq) *freq=obsfreqs[i];
+        
+    if (freq) {
+       if (sys==SYS_CMP)
+           *freq=obsfreqs_cmp[i];
+       else
+           *freq=obsfreqs[i];
+    }
         return (unsigned char)i;
     }
     return CODE_NONE;
@@ -554,22 +617,28 @@ extern unsigned char obs2code(const char *obs, int *freq)
 /* obs code to obs code string -------------------------------------------------
 * convert obs code to obs code string
 * args   : unsigned char code I obs code (CODE_???)
-*          int    *freq  IO     frequency (1:L1,2:L2,3:L5,4:L6,5:L7,6:L8,0:err)
-*                               (NULL: no output)
+*          int    *freq  IO     frequency (NULL: no output)
+*                               (1:L1/E1/B1, 2:L2/B2, 3:L5/E5a/L3/B3, 4:L6/LEX,
+                                 5:E5b, 6:E5(a+b), 7:S)
 * return : obs code string ("1C","1P","1P",...)
 * notes  : obs codes are based on reference [6] and qzss extension
 *-----------------------------------------------------------------------------*/
-extern char *code2obs(unsigned char code, int *freq)
+extern char *code2obs(int sys, unsigned char code, int *freq)
 {
     if (freq) *freq=0;
     if (code<=CODE_NONE||MAXCODE<code) return "";
-    if (freq) *freq=obsfreqs[code];
+    if (freq) {
+       if (sys==SYS_CMP)
+           *freq=obsfreqs_cmp[code];
+       else
+           *freq=obsfreqs[code];
+    }
     return obscodes[code];
 }
 /* set code priority -----------------------------------------------------------
 * set code priority for multiple codes in a frequency
 * args   : int    sys     I     system (or of SYS_???)
-*          int    freq    I     frequency (1:L1,2:L2,3:L5,4:L6,5:L7,6:L8)
+*          int    freq    I     frequency (1:L1,2:L2,3:L5,4:L6,5:L7,6:L8,7:L9)
 *          char   *pri    I     priority of codes (series of code characters)
 *                               (higher priority precedes lower)
 * return : none
@@ -585,6 +654,7 @@ extern void setcodepri(int sys, int freq, const char *pri)
     if (sys&SYS_QZS) strcpy(codepris[3][freq-1],pri);
     if (sys&SYS_SBS) strcpy(codepris[4][freq-1],pri);
     if (sys&SYS_CMP) strcpy(codepris[5][freq-1],pri);
+    if (sys&SYS_IRN) strcpy(codepris[6][freq-1],pri);
 }
 /* get code priority -----------------------------------------------------------
 * get code priority for multiple codes in a frequency
@@ -606,9 +676,10 @@ extern int getcodepri(int sys, unsigned char code, const char *opt)
         case SYS_QZS: i=3; optstr="-JL%2s"; break;
         case SYS_SBS: i=4; optstr="-SL%2s"; break;
         case SYS_CMP: i=5; optstr="-CL%2s"; break;
+        case SYS_IRN: i=6; optstr="-IL%2s"; break;
         default: return 0;
     }
-    obs=code2obs(code,&j);
+    obs=code2obs(sys,code,&j);
     
     /* parse code options */
     for (p=opt;p&&(p=strchr(p,'-'));p++) {
@@ -667,12 +738,12 @@ extern void setbits(unsigned char *buff, int pos, int len, int data)
 * return : crc-32 parity
 * notes  : see NovAtel OEMV firmware manual 1.7 32-bit CRC
 *-----------------------------------------------------------------------------*/
-extern unsigned int crc32(const unsigned char *buff, int len)
+extern unsigned int rtk_crc32(const unsigned char *buff, int len)
 {
     unsigned int crc=0;
     int i,j;
     
-    trace(4,"crc32: len=%d\n",len);
+    trace(4,"rtk_crc32: len=%d\n",len);
     
     for (i=0;i<len;i++) {
         crc^=buff[i];
@@ -689,12 +760,12 @@ extern unsigned int crc32(const unsigned char *buff, int len)
 * return : crc-24Q parity
 * notes  : see reference [2] A.4.3.3 Parity
 *-----------------------------------------------------------------------------*/
-extern unsigned int crc24q(const unsigned char *buff, int len)
+extern unsigned int rtk_crc24q(const unsigned char *buff, int len)
 {
     unsigned int crc=0;
     int i;
     
-    trace(4,"crc24q: len=%d\n",len);
+    trace(4,"rtk_crc24q: len=%d\n",len);
     
     for (i=0;i<len;i++) crc=((crc<<8)&0xFFFFFF)^tbl_CRC24Q[(crc>>16)^buff[i]];
     return crc;
@@ -706,12 +777,12 @@ extern unsigned int crc24q(const unsigned char *buff, int len)
 * return : crc-16 parity
 * notes  : see reference [10] A.3.
 *-----------------------------------------------------------------------------*/
-extern unsigned short crc16(const unsigned char *buff, int len)
+extern unsigned short rtk_crc16(const unsigned char *buff, int len)
 {
     unsigned short crc=0;
     int i;
     
-    trace(4,"crc16: len=%d\n",len);
+    trace(4,"rtk_crc16: len=%d\n",len);
     
     for (i=0;i<len;i++) {
         crc=(crc<<8)^tbl_CRC16[((crc>>8)^buff[i])&0xFF];
@@ -1014,7 +1085,8 @@ extern int matinv(double *A, int n)
     indx=imat(n,1); B=mat(n,n); matcpy(B,A,n,n);
     if (ludcmp(B,n,indx,&d)) {free(indx); free(B); return -1;}
     for (j=0;j<n;j++) {
-        for (i=0;i<n;i++) A[i+j*n]=0.0; A[j+j*n]=1.0;
+        for (i=0;i<n;i++) A[i+j*n]=0.0;
+        A[j+j*n]=1.0;
         lubksb(B,n,indx,A+j*n);
     }
     free(indx); free(B);
@@ -1103,14 +1175,18 @@ extern int filter(double *x, double *P, const double *H, const double *v,
     double *x_,*xp_,*P_,*Pp_,*H_;
     int i,j,k,info,*ix;
     
+    /* create list of non-zero states */
     ix=imat(n,1); for (i=k=0;i<n;i++) if (x[i]!=0.0&&P[i+i*n]>0.0) ix[k++]=i;
     x_=mat(k,1); xp_=mat(k,1); P_=mat(k,k); Pp_=mat(k,k); H_=mat(k,m);
+    /* compress array by removing zero elements to save computation time */
     for (i=0;i<k;i++) {
         x_[i]=x[ix[i]];
         for (j=0;j<k;j++) P_[i+j*k]=P[ix[i]+ix[j]*n];
         for (j=0;j<m;j++) H_[i+j*k]=H[ix[i]+j*n];
     }
+    /* do kalman filter state update on compressed arrays */
     info=filter_(x_,P_,H_,v,R,k,m,xp_,Pp_);
+    /* copy values from compressed arrays back to full arrays */
     for (i=0;i<k;i++) {
         x[ix[i]]=xp_[i];
         for (j=0;j<k;j++) P[ix[i]+ix[j]*n]=Pp_[i+j*k];
@@ -1187,7 +1263,8 @@ extern double str2num(const char *s, int i, int n)
     char str[256],*p=str;
     
     if (i<0||(int)strlen(s)<i||(int)sizeof(str)-1<n) return 0.0;
-    for (s+=i;*s&&--n>=0;s++) *p++=*s=='d'||*s=='D'?'E':*s; *p='\0';
+    for (s+=i;*s&&--n>=0;s++) *p++=*s=='d'||*s=='D'?'E':*s;
+    *p='\0';
     return sscanf(str,"%lf",&value)==1?value:0.0;
 }
 /* string to time --------------------------------------------------------------
@@ -1203,7 +1280,8 @@ extern int str2time(const char *s, int i, int n, gtime_t *t)
     char str[256],*p=str;
     
     if (i<0||(int)strlen(s)<i||(int)sizeof(str)-1<i) return -1;
-    for (s+=i;*s&&--n>=0;) *p++=*s++; *p='\0';
+    for (s+=i;*s&&--n>=0;) *p++=*s++;
+    *p='\0';
     if (sscanf(str,"%lf %lf %lf %lf %lf %lf",ep,ep+1,ep+2,ep+3,ep+4,ep+5)<6)
         return -1;
     if (ep[0]<100.0) ep[0]+=ep[0]<80.0?2000.0:1900.0;
@@ -1266,7 +1344,7 @@ extern gtime_t gpst2time(int week, double sec)
     gtime_t t=epoch2time(gpst0);
     
     if (sec<-1E9||1E9<sec) sec=0.0;
-    t.time+=86400*7*week+(int)sec;
+    t.time+=(time_t)86400*7*week+(int)sec;
     t.sec=sec-(int)sec;
     return t;
 }
@@ -1283,7 +1361,7 @@ extern double time2gpst(gtime_t t, int *week)
     int w=(int)(sec/(86400*7));
     
     if (week) *week=w;
-    return (double)(sec-w*86400*7)+t.sec;
+    return (double)(sec-(double)w*86400*7)+t.sec;
 }
 /* galileo system time to time -------------------------------------------------
 * convert week and tow in galileo system time (gst) to gtime_t struct
@@ -1296,7 +1374,7 @@ extern gtime_t gst2time(int week, double sec)
     gtime_t t=epoch2time(gst0);
     
     if (sec<-1E9||1E9<sec) sec=0.0;
-    t.time+=86400*7*week+(int)sec;
+    t.time+=(time_t)86400*7*week+(int)sec;
     t.sec=sec-(int)sec;
     return t;
 }
@@ -1313,7 +1391,7 @@ extern double time2gst(gtime_t t, int *week)
     int w=(int)(sec/(86400*7));
     
     if (week) *week=w;
-    return (double)(sec-w*86400*7)+t.sec;
+    return (double)(sec-(double)w*86400*7)+t.sec;
 }
 /* beidou time (bdt) to time ---------------------------------------------------
 * convert week and tow in beidou time (bdt) to gtime_t struct
@@ -1326,7 +1404,7 @@ extern gtime_t bdt2time(int week, double sec)
     gtime_t t=epoch2time(bdt0);
     
     if (sec<-1E9||1E9<sec) sec=0.0;
-    t.time+=86400*7*week+(int)sec;
+    t.time+=(time_t)86400*7*week+(int)sec;
     t.sec=sec-(int)sec;
     return t;
 }
@@ -1343,7 +1421,7 @@ extern double time2bdt(gtime_t t, int *week)
     int w=(int)(sec/(86400*7));
     
     if (week) *week=w;
-    return (double)(sec-w*86400*7)+t.sec;
+    return (double)(sec-(double)w*86400*7)+t.sec;
 }
 /* add time --------------------------------------------------------------------
 * add time to gtime_t struct
@@ -1450,7 +1528,7 @@ static int read_leaps_usno(FILE *fp)
         ls[n][0]=y;
         ls[n][1]=m;
         ls[n][2]=d;
-        ls[n++][6]=19.0-tai_utc;
+        ls[n++][6]=(char)(19.0-tai_utc);
     }
     for (i=0;i<n;i++) for (j=0;j<7;j++) {
         leaps[i][j]=ls[n-i-1][j];
@@ -1673,14 +1751,25 @@ extern void sleepms(int ms)
 * convert degree to degree-minute-second
 * args   : double deg       I   degree
 *          double *dms      O   degree-minute-second {deg,min,sec}
+*          int    ndec      I   number of decimals of second
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void deg2dms(double deg, double *dms)
+extern void deg2dms(double deg, double *dms, int ndec)
 {
     double sign=deg<0.0?-1.0:1.0,a=fabs(deg);
+    double unit=pow(0.1,ndec);
     dms[0]=floor(a); a=(a-dms[0])*60.0;
     dms[1]=floor(a); a=(a-dms[1])*60.0;
-    dms[2]=a; dms[0]*=sign;
+    dms[2]=floor(a/unit+0.5)*unit;
+    if (dms[2]>=60.0) {
+        dms[2]=0.0;
+        dms[1]+=1.0;
+        if (dms[1]>=60.0) {
+            dms[1]=0.0;
+            dms[0]+=1.0;
+        }
+    }
+    dms[0]*=sign;
 }
 /* convert deg-min-sec to degree -----------------------------------------------
 * convert degree-minute-second to degree
@@ -2564,6 +2653,38 @@ static void uniqseph(nav_t *nav)
     
     trace(4,"uniqseph: ns=%d\n",nav->ns);
 }
+/* ura index to ura nominal value (m) ----------------------------------------*/
+extern double uravalue(int sys, int sva)
+{
+    if (sys==SYS_GAL) {
+        if (sva<= 49) return sva*0.01;
+        if (sva<= 74) return 0.5+(sva- 50)*0.02;
+        if (sva<= 99) return 1.0+(sva- 75)*0.04;
+        if (sva<=125) return 2.0+(sva-100)*0.16;
+        return -1.0; /* unknown or NAPA */
+    }
+    else {
+        return 0<=sva&&sva<15?ura_nominal[sva]:8192.0;
+    }
+}
+extern int uraindex(double value, int sys)
+{
+    int i;
+
+    if (sys==SYS_GAL) {
+        if (value>0 && value<0.5)
+            i=(int)(value*100+0.5);
+        else if (value>=0.5 && value<1.0)
+            i=50+(int)((value-0.5)/2*100+0.5);
+        else if (value>=1.0 && value<2.0)
+            i=75+(int)((value-1.0)/4*100);
+        else if (value>=2.0 && value<6.0)
+            i=100+(int)((value-2.0)/16*100+0.5);
+        else i=125;
+    } else
+        for (i=0;i<15;i++) if (ura_value[i]>=value) break;
+    return i;
+}
 /* unique ephemerides ----------------------------------------------------------
 * unique ephemerides in navigation data and update carrier wave length
 * args   : nav_t *nav    IO     navigation data
@@ -2652,6 +2773,7 @@ extern int readnav(const char *file, nav_t *nav)
     eph_t eph0={0};
     geph_t geph0={0};
     char buff[4096],*p;
+    long toe_time,tof_time,toc_time,ttr_time;
     int i,sat,prn;
     
     trace(3,"loadnav: file=%s\n",file);
@@ -2675,24 +2797,28 @@ extern int readnav(const char *file, nav_t *nav)
         if (satsys(sat,&prn)==SYS_GLO) {
             nav->geph[prn-1]=geph0;
             nav->geph[prn-1].sat=sat;
+            toe_time=tof_time=0;
             sscanf(p+1,"%d,%d,%d,%d,%d,%ld,%ld,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,"
                         "%lf,%lf,%lf,%lf",
                    &nav->geph[prn-1].iode,&nav->geph[prn-1].frq,&nav->geph[prn-1].svh,
                    &nav->geph[prn-1].sva,&nav->geph[prn-1].age,
-                   &nav->geph[prn-1].toe.time,&nav->geph[prn-1].tof.time,
+                   &toe_time,&tof_time,
                    &nav->geph[prn-1].pos[0],&nav->geph[prn-1].pos[1],&nav->geph[prn-1].pos[2],
                    &nav->geph[prn-1].vel[0],&nav->geph[prn-1].vel[1],&nav->geph[prn-1].vel[2],
                    &nav->geph[prn-1].acc[0],&nav->geph[prn-1].acc[1],&nav->geph[prn-1].acc[2],
                    &nav->geph[prn-1].taun  ,&nav->geph[prn-1].gamn  ,&nav->geph[prn-1].dtaun);
+            nav->geph[prn-1].toe.time=toe_time;
+            nav->geph[prn-1].tof.time=tof_time;
         }
         else {
             nav->eph[sat-1]=eph0;
             nav->eph[sat-1].sat=sat;
+            toe_time=toc_time=ttr_time=0;
             sscanf(p+1,"%d,%d,%d,%d,%ld,%ld,%ld,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,"
                         "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%d,%d",
                    &nav->eph[sat-1].iode,&nav->eph[sat-1].iodc,&nav->eph[sat-1].sva ,
-                   &nav->eph[sat-1].svh ,&nav->eph[sat-1].toe.time,
-                   &nav->eph[sat-1].toc.time,&nav->eph[sat-1].ttr.time,
+                   &nav->eph[sat-1].svh ,
+                   &toe_time,&toc_time,&ttr_time,
                    &nav->eph[sat-1].A   ,&nav->eph[sat-1].e   ,&nav->eph[sat-1].i0  ,
                    &nav->eph[sat-1].OMG0,&nav->eph[sat-1].omg ,&nav->eph[sat-1].M0  ,
                    &nav->eph[sat-1].deln,&nav->eph[sat-1].OMGd,&nav->eph[sat-1].idot,
@@ -2701,6 +2827,9 @@ extern int readnav(const char *file, nav_t *nav)
                    &nav->eph[sat-1].toes,&nav->eph[sat-1].fit ,&nav->eph[sat-1].f0  ,
                    &nav->eph[sat-1].f1  ,&nav->eph[sat-1].f2  ,&nav->eph[sat-1].tgd[0],
                    &nav->eph[sat-1].code, &nav->eph[sat-1].flag);
+            nav->eph[sat-1].toe.time=toe_time;
+            nav->eph[sat-1].toc.time=toc_time;
+            nav->eph[sat-1].ttr.time=ttr_time;
         }
     }
     fclose(fp);
@@ -2880,10 +3009,10 @@ extern void traceobs(int level, const obsd_t *obs, int n)
     for (i=0;i<n;i++) {
         time2str(obs[i].time,str,3);
         satno2id(obs[i].sat,id);
-        fprintf(fp_trace," (%2d) %s %-3s rcv%d %13.3f %13.3f %13.3f %13.3f %d %d %d %d %3.1f %3.1f\n",
+        fprintf(fp_trace," (%2d) %s %-3s rcv%d %13.3f %13.3f %13.3f %13.3f %d %d %d %d %x %x %3.1f %3.1f\n",
               i+1,str,id,obs[i].rcv,obs[i].L[0],obs[i].L[1],obs[i].P[0],
               obs[i].P[1],obs[i].LLI[0],obs[i].LLI[1],obs[i].code[0],
-              obs[i].code[1],obs[i].SNR[0]*0.25,obs[i].SNR[1]*0.25);
+              obs[i].code[1],obs[i].qualL[0],obs[i].qualP[0],obs[i].SNR[0]*0.25,obs[i].SNR[1]*0.25);
     }
     fflush(fp_trace);
 }
@@ -3123,7 +3252,7 @@ extern void createdir(const char *path)
 /* replace string ------------------------------------------------------------*/
 static int repstr(char *str, const char *pat, const char *rep)
 {
-    int len=strlen(pat);
+    int len=(int)strlen(pat);
     char buff[1024],*p,*q,*r;
     
     for (p=str,r=buff;*p;p=q+len) {
@@ -3255,30 +3384,34 @@ extern int reppaths(const char *path, char *rpath[], int nmax, gtime_t ts,
 *-----------------------------------------------------------------------------*/
 extern double satwavelen(int sat, int frq, const nav_t *nav)
 {
-    const double freq_glo[]={FREQ1_GLO,FREQ2_GLO,FREQ3_GLO};
-    const double dfrq_glo[]={DFRQ1_GLO,DFRQ2_GLO,0.0};
+    const double freq_glo[]={FREQ1_GLO,FREQ2_GLO};
+    const double dfrq_glo[]={DFRQ1_GLO,DFRQ2_GLO};
     int i,sys=satsys(sat,NULL);
     
     if (sys==SYS_GLO) {
-        if (0<=frq&&frq<=2) {
+        if (0<=frq&&frq<=1) {
             for (i=0;i<nav->ng;i++) {
                 if (nav->geph[i].sat!=sat) continue;
                 return CLIGHT/(freq_glo[frq]+dfrq_glo[frq]*nav->geph[i].frq);
             }
         }
+        else if (frq==2) { /* L3 */
+            return CLIGHT/FREQ3_GLO;
+        }
     }
     else if (sys==SYS_CMP) {
         if      (frq==0) return CLIGHT/FREQ1_CMP; /* B1 */
-        else if (frq==1) return CLIGHT/FREQ2_CMP; /* B3 */
-        else if (frq==2) return CLIGHT/FREQ3_CMP; /* B2 */
+        else if (frq==1) return CLIGHT/FREQ2_CMP; /* B2 */
+        else if (frq==2) return CLIGHT/FREQ3_CMP; /* B3 */
     }
     else {
-        if      (frq==0) return CLIGHT/FREQ1; /* L1/E1 */
-        else if (frq==1) return CLIGHT/FREQ2; /* L2 */
-        else if (frq==2) return CLIGHT/FREQ5; /* L5/E5a */
-        else if (frq==3) return CLIGHT/FREQ6; /* L6/LEX */
-        else if (frq==4) return CLIGHT/FREQ7; /* E5b */
-        else if (frq==5) return CLIGHT/FREQ8; /* E5a+b */
+        if      (frq==0) return CLIGHT/FREQL1; /* L1/E1 */
+        else if (frq==1) return CLIGHT/FREQL2; /* L2 */
+        else if (frq==2) return CLIGHT/FREQE5b; /* E5b */
+        else if (frq==3) return CLIGHT/FREQL5; /* L5/E5a */
+        else if (frq==4) return CLIGHT/FREQE6; /* L6/LEX */
+        else if (frq==5) return CLIGHT/FREQE5ab; /* E5a+b */
+        else if (frq==6) return CLIGHT/FREQs; /* S */
     }
     return 0.0;
 }
@@ -3331,7 +3464,7 @@ extern double satazel(const double *pos, const double *e, double *azel)
 * return : none
 * notes  : dop[0]-[3] return 0 in case of dop computation error
 *-----------------------------------------------------------------------------*/
-#define SQRT(x)     ((x)<0.0?0.0:sqrt(x))
+#define SQRT(x)     ((x)<0.0||(x)!=(x)?0.0:sqrt(x))
 
 extern void dops(int ns, const double *azel, double elmin, double *dop)
 {
@@ -3748,12 +3881,12 @@ extern void csmooth(obs_t *obs, int ns)
 * note   : creates uncompressed file in tempolary directory
 *          gzip and crx2rnx commands have to be installed in commands path
 *-----------------------------------------------------------------------------*/
-extern int uncompress(const char *file, char *uncfile)
+extern int rtk_uncompress(const char *file, char *uncfile)
 {
     int stat=0;
     char *p,cmd[2048]="",tmpfile[1024]="",buff[1024],*fname,*dir="";
     
-    trace(3,"uncompress: file=%s\n",file);
+    trace(3,"rtk_uncompress: file=%s\n",file);
     
     strcpy(tmpfile,file);
     if (!(p=strrchr(tmpfile,'.'))) return 0;
@@ -3813,7 +3946,7 @@ extern int uncompress(const char *file, char *uncfile)
         if (stat) remove(tmpfile);
         stat=1;
     }
-    trace(3,"uncompress: stat=%d\n",stat);
+    trace(3,"rtk_uncompress: stat=%d\n",stat);
     return stat;
 }
 /* dummy application functions for shared library ----------------------------*/

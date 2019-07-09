@@ -4,9 +4,9 @@ object PlotOptDialog: TPlotOptDialog
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Options'
-  ClientHeight = 397
+  ClientHeight = 421
   ClientWidth = 552
-  Color = clBtnFace
+  Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -26,10 +26,14 @@ object PlotOptDialog: TPlotOptDialog
     Left = 0
     Top = 0
     Width = 552
-    Height = 395
+    Height = 417
     Align = alTop
     BevelOuter = bvNone
+    Color = clWhite
+    ParentBackground = False
     TabOrder = 2
+    ExplicitLeft = 4
+    ExplicitTop = -4
     object Label1: TLabel
       Left = 373
       Top = 123
@@ -193,7 +197,7 @@ object PlotOptDialog: TPlotOptDialog
     end
     object Label3: TLabel
       Left = 193
-      Top = 211
+      Top = 233
       Width = 84
       Height = 13
       Caption = 'Coordinate Origin'
@@ -359,6 +363,13 @@ object PlotOptDialog: TPlotOptDialog
       Height = 13
       Caption = 'Max Multipath'
     end
+    object Label38: TLabel
+      Left = 193
+      Top = 369
+      Width = 95
+      Height = 13
+      Caption = 'API Key for GMView'
+    end
     object Panel1: TPanel
       Left = 361
       Top = 186
@@ -412,7 +423,7 @@ object PlotOptDialog: TPlotOptDialog
     end
     object Origin: TComboBox
       Left = 283
-      Top = 208
+      Top = 230
       Width = 77
       Height = 21
       Style = csDropDownList
@@ -652,7 +663,7 @@ object PlotOptDialog: TPlotOptDialog
       Left = 520
       Top = 185
       Width = 25
-      Height = 23
+      Height = 22
       Caption = '...'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -825,7 +836,7 @@ object PlotOptDialog: TPlotOptDialog
       Caption = 'Satellite System'
       TabOrder = 11
       object NavSys1: TCheckBox
-        Left = 13
+        Left = 8
         Top = 19
         Width = 45
         Height = 17
@@ -835,7 +846,7 @@ object PlotOptDialog: TPlotOptDialog
         TabOrder = 0
       end
       object NavSys2: TCheckBox
-        Left = 65
+        Left = 49
         Top = 19
         Width = 69
         Height = 17
@@ -843,36 +854,44 @@ object PlotOptDialog: TPlotOptDialog
         TabOrder = 1
       end
       object NavSys5: TCheckBox
-        Left = 65
-        Top = 38
+        Left = 8
+        Top = 41
         Width = 57
         Height = 17
-        Caption = 'SBAS'
+        Caption = 'SBS'
         TabOrder = 4
       end
       object NavSys3: TCheckBox
-        Left = 117
+        Left = 90
         Top = 19
         Width = 57
         Height = 17
-        Caption = 'Galileo'
+        Caption = 'GAL'
         TabOrder = 2
       end
       object NavSys4: TCheckBox
-        Left = 13
-        Top = 38
+        Left = 131
+        Top = 19
         Width = 47
         Height = 17
-        Caption = 'QZSS'
+        Caption = 'QZS'
         TabOrder = 3
       end
       object NavSys6: TCheckBox
-        Left = 117
-        Top = 38
+        Left = 49
+        Top = 41
         Width = 57
         Height = 17
-        Caption = 'BeiDou'
+        Caption = 'BDS'
         TabOrder = 5
+      end
+      object NavSys7: TCheckBox
+        Left = 90
+        Top = 41
+        Width = 57
+        Height = 17
+        Caption = 'IRN'
+        TabOrder = 6
       end
     end
     object ElMask: TComboBox
@@ -898,7 +917,7 @@ object PlotOptDialog: TPlotOptDialog
     object AnimCycle: TComboBox
       Left = 467
       Top = 208
-      Width = 78
+      Width = 77
       Height = 21
       TabOrder = 46
       Text = '1'
@@ -965,7 +984,7 @@ object PlotOptDialog: TPlotOptDialog
       Left = 520
       Top = 253
       Width = 25
-      Height = 23
+      Height = 22
       Caption = '...'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -1010,7 +1029,7 @@ object PlotOptDialog: TPlotOptDialog
     object RefCycle: TEdit
       Left = 467
       Top = 230
-      Width = 78
+      Width = 77
       Height = 21
       TabOrder = 47
       Text = '100'
@@ -1028,7 +1047,7 @@ object PlotOptDialog: TPlotOptDialog
       OnClick = MColorClick
     end
     object QcCmd: TEdit
-      Left = 255
+      Left = 254
       Top = 276
       Width = 290
       Height = 21
@@ -1137,14 +1156,14 @@ object PlotOptDialog: TPlotOptDialog
         'ddd mm ss.ss')
     end
     object RnxOpts: TEdit
-      Left = 255
+      Left = 254
       Top = 298
       Width = 290
       Height = 21
       TabOrder = 54
     end
     object TLEFile: TEdit
-      Left = 255
+      Left = 254
       Top = 320
       Width = 245
       Height = 21
@@ -1154,7 +1173,7 @@ object PlotOptDialog: TPlotOptDialog
       Left = 520
       Top = 319
       Width = 25
-      Height = 23
+      Height = 22
       Caption = '...'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -1166,9 +1185,9 @@ object PlotOptDialog: TPlotOptDialog
       OnClick = BtnTLEFileClick
     end
     object TLESatFile: TEdit
-      Left = 255
+      Left = 254
       Top = 342
-      Width = 246
+      Width = 245
       Height = 21
       TabOrder = 57
     end
@@ -1176,7 +1195,7 @@ object PlotOptDialog: TPlotOptDialog
       Left = 520
       Top = 341
       Width = 25
-      Height = 23
+      Height = 22
       Caption = '...'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -1204,20 +1223,44 @@ object PlotOptDialog: TPlotOptDialog
         '20'
         '30')
     end
+    object EditTimeSync: TEdit
+      Left = 283
+      Top = 208
+      Width = 77
+      Height = 21
+      TabOrder = 60
+      Text = '0'
+    end
+    object ChkTimeSync: TCheckBox
+      Left = 190
+      Top = 210
+      Width = 87
+      Height = 17
+      Caption = 'Time Sync Port'
+      TabOrder = 61
+      OnClick = ChkTimeSyncClick
+    end
+    object ApiKey: TEdit
+      Left = 292
+      Top = 364
+      Width = 253
+      Height = 21
+      TabOrder = 62
+    end
   end
   object BtnCancel: TButton
-    Left = 457
-    Top = 366
-    Width = 89
+    Left = 455
+    Top = 388
+    Width = 92
     Height = 29
     Caption = '&Cancel'
     ModalResult = 2
     TabOrder = 1
   end
   object BtnOK: TButton
-    Left = 360
-    Top = 366
-    Width = 89
+    Left = 363
+    Top = 388
+    Width = 92
     Height = 29
     Caption = '&OK'
     ModalResult = 1
@@ -1225,8 +1268,8 @@ object PlotOptDialog: TPlotOptDialog
     OnClick = BtnOKClick
   end
   object ColorDialog: TColorDialog
-    Left = 118
-    Top = 350
+    Left = 22
+    Top = 374
   end
   object FontDialog: TFontDialog
     Font.Charset = DEFAULT_CHARSET
@@ -1235,15 +1278,15 @@ object PlotOptDialog: TPlotOptDialog
     Font.Name = 'Tahoma'
     Font.Style = []
     Options = []
-    Left = 177
-    Top = 348
+    Left = 95
+    Top = 373
   end
   object OpenDialog: TOpenDialog
     Filter = 
       'Text File (*.txt)|*.txt|Position File (*.pos,*.snx)|*.pos;*.snx|' +
       'All File (*.*)|*.*'
     Options = [ofHideReadOnly, ofNoChangeDir, ofEnableSizing]
-    Left = 148
-    Top = 352
+    Left = 60
+    Top = 374
   end
 end

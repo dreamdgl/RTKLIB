@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * convbin.c : convert receiver binary log file to rinex obs/nav, sbas messages
 *
-*          Copyright (C) 2007-2016 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2007-2018 by T.TAKASU, All rights reserved.
 *
 * options : -DWIN32 use windows file path separator
 *
@@ -30,6 +30,15 @@
 *           2016/05/25 1.13 fix bug on initializing output file paths in
 *                           convbin()
 *           2016/06/09 1.14 fix bug on output file with -v 3.02
+*           2016/07/01 1.15 support log format CMR/CMR+
+*           2016/07/31 1.16 add option -halfc
+*           2017/05/26 1.17 add input format tersus
+*           2017/06/06 1.18 fix bug on output beidou and irnss nav files
+*                           add option -tt
+*           2018/10/10 1.19 default options are changed.
+*                             scan input file: off - on
+*                             number of freq: 2 -> 3
+*                           add option -noscan
 *-----------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,10 +46,9 @@
 #include <stdarg.h>
 #include "rtklib.h"
 
-static const char rcsid[]="$Id: convbin.c,v 1.1 2008/07/17 22:13:04 ttaka Exp $";
-
 #define PRGNAME   "CONVBIN"
 #define TRACEFILE "convbin.trace"
+#define NOUTFILE        9       /* number of output files */
 
 /* help text -----------------------------------------------------------------*/
 static const char *help[]={
@@ -61,7 +69,7 @@ static const char *help[]={
 " NovAtel OEMV/4,OEMStar: RANGECMPB, RANGEB, RAWEPHEMB, IONUTCB, RAWWASSFRAMEB",
 " NovAtel OEM3          : RGEB, REGD, REPB, FRMB, IONB, UTCB",
 " u-blox LEA-4T/5T/6T   : RXM-RAW, RXM-SFRB",
-" NovAtel Superstar II  : ID#20, ID#21, ID#22, ID#23, ID#67",
+" Swift Piksi Multi     : ",
 " Hemisphere            : BIN76, BIN80, BIN94, BIN95, BIN96",
 " SkyTraq S1315F        : msg0xDD, msg0xE0, msg0xDC",
 " GW10                  : msg0x08, msg0x03, msg0x27, msg0x20",
@@ -73,6 +81,9 @@ static const char *help[]={
 "                         0x01-01,0x01-02,0x01-03,0x01-04,0x01-06,0x7f-05",
 " Trimble               : RT17",
 " Septentrio            : SBF",
+" CMR                   : CMR Type 0, 1, 2, 3, 4, CMR+ Type 1, 2, 3",
+" TERSUS                : RANGECMPB, RANGEB, GPSEPHEMB, GLOEPHEMERISB,",
+"                         BDSEPHEMERISB",
 " RINEX                 : OBS, NAV, GNAV, HNAV, LNAV, QNAV",
 "",
 " Options [default]",
@@ -80,16 +91,17 @@ static const char *help[]={
 "     file         input receiver binary log file",
 "     -ts y/m/d h:m:s  start time [all]",
 "     -te y/m/d h:m:s  end time [all]",
-"     -tr y/m/d h:m:s  approximated time for rtcm messages",
+"     -tr y/m/d h:m:s  approximated time for RTCM/CMR/CMR+ messages",
 "     -ti tint     observation data interval (s) [all]",
+"     -tt ttol     observation data epoch tolerance (s) [0.005]",
 "     -span span   time span (h) [all]",
 "     -r format    log format type",
 "                  rtcm2= RTCM 2",
 "                  rtcm3= RTCM 3",
 "                  nov  = NovAtel OEMV/4/6,OEMStar",
 "                  oem3 = NovAtel OEM3",
-"                  ubx  = ublox LEA-4T/5T/6T",
-"                  ss2  = NovAtel Superstar II",
+"                  ubx  = ublox LEA-4T/5T/6T/7T/M8T",
+"                  sbp  = Swift Navigation SBP",
 "                  hemis= Hemisphere Eclipse/Crescent",
 "                  stq  = SkyTraq S1315F",
 "                  javad= Javad",
@@ -97,9 +109,11 @@ static const char *help[]={
 "                  binex= BINEX",
 "                  rt17 = Trimble RT17",
 "                  sbf  = Septentrio SBF",
+"                  cmr  = CMR/CMR+",
+"                  tersus= TERSUS",
 "                  rinex= RINEX",
 "     -ro opt      receiver options",
-"     -f freq      number of frequencies [2]",
+"     -f freq      number of frequencies [3]",
 "     -hc comment  rinex header: comment line",
 "     -hm marker   rinex header: marker name",
 "     -hn markno   rinex header: marker number",
@@ -115,11 +129,13 @@ static const char *help[]={
 "     -oi          include iono correction in rinex nav header [off]",
 "     -ot          include time correction in rinex nav header [off]",
 "     -ol          include leap seconds in rinex nav header [off]",
-"     -scan        scan input file [off]",
-"     -mask   [sig[,...]] signal mask(s) (sig={G|R|E|J|S|C}L{1C|1P|1W|...})",
+"     -scan        scan input file [on]",
+"     -noscan      no scan input file [off]",
+"     -halfc       half-cycle ambiguity correction [off]",
+"     -mask   [sig[,...]] signal mask(s) (sig={G|R|E|J|S|C|I}L{1C|1P|1W|...})",
 "     -nomask [sig[,...]] signal no mask (same as above)",
 "     -x sat       exclude satellite",
-"     -y sys       exclude systems (G:GPS,R:GLONASS,E:Galileo,J:QZSS,S:SBAS,C:BeiDou)",
+"     -y sys       exclude systems (G:GPS,R:GLO,E:GAL,J:QZS,S:SBS,C:BDS,I:IRN)",
 "     -d dir       output directory [same as input file]",
 "     -c staid     use RINEX file name convention with staid [off]",
 "     -o ofile     output RINEX OBS file",
@@ -128,6 +144,8 @@ static const char *help[]={
 "     -h hfile     output RINEX HNAV file",
 "     -q qfile     output RINEX QNAV file",
 "     -l lfile     output RINEX LNAV file",
+"     -b cfile     output RINEX CNAV file",
+"     -i ifile     output RINEX INAV file",
 "     -s sfile     output SBAS message file",
 "     -trace level output trace level [off]",
 "",
@@ -140,14 +158,16 @@ static const char *help[]={
 "     *.rtcm2       RTCM 2",
 "     *.rtcm3       RTCM 3",
 "     *.gps         NovAtel OEMV/4/6,OEMStar",
-"     *.ubx         u-blox LEA-4T/5T/6T",
-"     *.log         NovAtel Superstar II",
+"     *.ubx         u-blox LEA-4T/5T/6T/7T/M8T",
+"     *.sbp         Swift Navigation SBP",
 "     *.bin         Hemisphere Eclipse/Crescent",
 "     *.stq         SkyTraq S1315F",
 "     *.jps         Javad",
 "     *.bnx,*binex  BINEX",
 "     *.rt17        Trimble RT17",
 "     *.sbf         Septentrio SBF",
+"     *.cmr         CMR/CMR+",
+"     *.trs         TERSUS",
 "     *.obs,*.*o    RINEX OBS"
 };
 /* print help ----------------------------------------------------------------*/
@@ -170,13 +190,15 @@ static int convbin(int format, rnxopt_t *opt, const char *ifile, char **file,
                    char *dir)
 {
     int i,def;
-    char work[1024],ofile_[7][1024]={"","","","","","",""},*ofile[7],*p;
+    static char work[1024],ofile_[NOUTFILE][1024]={"","","","","","","","",""};
+    char *ofile[NOUTFILE],*p;
     char *extnav=opt->rnxver<=2.99||opt->navsys==SYS_GPS?"N":"P";
     char *extlog=format==STRFMT_LEXR?"lex":"sbs";
     
-    def=!file[0]&&!file[1]&&!file[2]&&!file[3]&&!file[4]&&!file[5]&&!file[6];
+    def=!file[0]&&!file[1]&&!file[2]&&!file[3]&&!file[4]&&!file[5]&&!file[6]&&
+        !file[7]&&!file[8];
     
-    for (i=0;i<7;i++) ofile[i]=ofile_[i];
+    for (i=0;i<NOUTFILE;i++) ofile[i]=ofile_[i];
     
     if (file[0]) strcpy(ofile[0],file[0]);
     else if (*opt->staid) {
@@ -231,20 +253,38 @@ static int convbin(int format, rnxopt_t *opt, const char *ifile, char **file,
     else if (opt->rnxver<=2.99&&def) {
         strcpy(ofile[5],ifile);
         if ((p=strrchr(ofile[5],'.'))) strcpy(p,".lnav");
-        else strcat(ofile[5],".qnav");
+        else strcat(ofile[5],".lnav");
     }
     if (file[6]) strcpy(ofile[6],file[6]);
+    else if (opt->rnxver<=2.99&&*opt->staid) {
+        strcpy(ofile[6],"%r%n0.%yC");
+    }
+    else if (opt->rnxver<=2.99&&def) {
+        strcpy(ofile[6],ifile);
+        if ((p=strrchr(ofile[6],'.'))) strcpy(p,".cnav");
+        else strcat(ofile[6],".cnav");
+    }
+    if (file[7]) strcpy(ofile[7],file[7]);
+    else if (opt->rnxver<=2.99&&*opt->staid) {
+        strcpy(ofile[7],"%r%n0.%yI");
+    }
+    else if (opt->rnxver<=2.99&&def) {
+        strcpy(ofile[7],ifile);
+        if ((p=strrchr(ofile[7],'.'))) strcpy(p,".inav");
+        else strcat(ofile[7],".inav");
+    }
+    if (file[8]) strcpy(ofile[8],file[8]);
     else if (*opt->staid) {
-        strcpy(ofile[6],"%r%n0_%y.");
-        strcat(ofile[6],extlog);
+        strcpy(ofile[8],"%r%n0_%y.");
+        strcat(ofile[8],extlog);
     }
     else if (def) {
-        strcpy(ofile[6],ifile);
-        if ((p=strrchr(ofile[6],'.'))) strcpy(p,".");
-        else strcat(ofile[6],".");
-        strcat(ofile[6],extlog);
+        strcpy(ofile[8],ifile);
+        if ((p=strrchr(ofile[8],'.'))) strcpy(p,".");
+        else strcat(ofile[8],".");
+        strcat(ofile[8],extlog);
     }
-    for (i=0;i<7;i++) {
+    for (i=0;i<NOUTFILE;i++) {
         if (!*dir||!*ofile[i]) continue;
         if ((p=strrchr(ofile[i],FILEPATHSEP))) strcpy(work,p+1);
         else strcpy(work,ofile[i]);
@@ -258,7 +298,9 @@ static int convbin(int format, rnxopt_t *opt, const char *ifile, char **file,
     if (*ofile[3]) fprintf(stderr,"->rinex hnav: %s\n",ofile[3]);
     if (*ofile[4]) fprintf(stderr,"->rinex qnav: %s\n",ofile[4]);
     if (*ofile[5]) fprintf(stderr,"->rinex lnav: %s\n",ofile[5]);
-    if (*ofile[6]) fprintf(stderr,"->sbas log  : %s\n",ofile[6]);
+    if (*ofile[6]) fprintf(stderr,"->rinex cnav: %s\n",ofile[6]);
+    if (*ofile[7]) fprintf(stderr,"->rinex inav: %s\n",ofile[7]);
+    if (*ofile[8]) fprintf(stderr,"->sbas log  : %s\n",ofile[8]);
     
     if (!convrnx(format,opt,ifile,ofile)) {
         fprintf(stderr,"\n");
@@ -282,8 +324,9 @@ static void setmask(const char *argv, rnxopt_t *opt, int mask)
         else if (p[0]=='J') i=3;
         else if (p[0]=='S') i=4;
         else if (p[0]=='C') i=5;
+        else if (p[0]=='I') i=6;
         else continue;
-        if ((code=obs2code(p+2,NULL))) {
+        if ((code=obs2code(0,p+2,NULL))) {
             opt->mask[i][code-1]=mask?'1':'0';
         }
     }
@@ -294,14 +337,15 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
 {
     double eps[]={1980,1,1,0,0,0},epe[]={2037,12,31,0,0,0};
     double epr[]={2010,1,1,0,0,0},span=0.0;
-    int i,j,k,sat,nf=2,nc=2,format=-1;
-    char *p,*sys,*fmt="",*paths[1],path[1024];
+    int i,j,k,sat,nf=3,nc=2,format=-1;
+    char *p,*sys,*fmt="",*paths[1],path[1024],buff[256];
     
     opt->rnxver=2.11;
     opt->obstype=OBSTYPE_PR|OBSTYPE_CP;
     opt->navsys=SYS_GPS|SYS_GLO|SYS_GAL|SYS_QZS|SYS_SBS|SYS_CMP;
+    opt->scanobs=1;
     
-    for (i=0;i<6;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
+    for (i=0;i<7;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
     
     for (i=1;i<argc;i++) {
         if (!strcmp(argv[i],"-ts")&&i+2<argc) {
@@ -321,6 +365,9 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         }
         else if (!strcmp(argv[i],"-ti")&&i+1<argc) {
             opt->tint=atof(argv[++i]);
+        }
+        else if (!strcmp(argv[i],"-tt")&&i+1<argc) {
+            opt->ttol=atof(argv[++i]);
         }
         else if (!strcmp(argv[i],"-span")&&i+1<argc) {
             span=atof(argv[++i]);
@@ -347,27 +394,32 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
             strcpy(opt->markertype,argv[++i]);
         }
         else if (!strcmp(argv[i],"-ho")&&i+1<argc) {
-            for (j=0,p=strtok(argv[++i],"/");j<2&&p;j++,p=strtok(NULL,"/")) {
+            strcpy(buff,argv[++i]);
+            for (j=0,p=strtok(buff,"/");j<2&&p;j++,p=strtok(NULL,"/")) {
                 strcpy(opt->name[j],p);
             }
         }
         else if (!strcmp(argv[i],"-hr")&&i+1<argc) {
-            for (j=0,p=strtok(argv[++i],"/");j<3&&p;j++,p=strtok(NULL,"/")) {
+            strcpy(buff,argv[++i]);
+            for (j=0,p=strtok(buff,"/");j<3&&p;j++,p=strtok(NULL,"/")) {
                 strcpy(opt->rec[j],p);
             }
         }
         else if (!strcmp(argv[i],"-ha")&&i+1<argc) {
-            for (j=0,p=strtok(argv[++i],"/");j<3&&p;j++,p=strtok(NULL,"/")) {
+            strcpy(buff,argv[++i]);
+            for (j=0,p=strtok(buff,"/");j<3&&p;j++,p=strtok(NULL,"/")) {
                 strcpy(opt->ant[j],p);
             }
         }
         else if (!strcmp(argv[i],"-hp")&&i+1<argc) {
-            for (j=0,p=strtok(argv[++i],"/");j<3&&p;j++,p=strtok(NULL,"/")) {
+            strcpy(buff,argv[++i]);
+            for (j=0,p=strtok(buff,"/");j<3&&p;j++,p=strtok(NULL,"/")) {
                 opt->apppos[j]=atof(p);
             }
         }
         else if (!strcmp(argv[i],"-hd")&&i+1<argc) {
-            for (j=0,p=strtok(argv[++i],"/");j<3&&p;j++,p=strtok(NULL,"/")) {
+            strcpy(buff,argv[++i]);
+            for (j=0,p=strtok(buff,"/");j<3&&p;j++,p=strtok(NULL,"/")) {
                 opt->antdel[j]=atof(p);
             }
         }
@@ -392,6 +444,12 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(argv[i],"-scan")) {
             opt->scanobs=1;
         }
+        else if (!strcmp(argv[i],"-noscan")) {
+            opt->scanobs=0;
+        }
+        else if (!strcmp(argv[i],"-halfc")) {
+            opt->halfcyc=1;
+        }
         else if (!strcmp(argv[i],"-mask")&&i+1<argc) {
             for (j=0;j<6;j++) for (k=0;k<64;k++) opt->mask[j][k]='0';
             setmask(argv[++i],opt,1);
@@ -410,6 +468,7 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
             else if (!strcmp(sys,"J")) opt->navsys&=~SYS_QZS;
             else if (!strcmp(sys,"S")) opt->navsys&=~SYS_SBS;
             else if (!strcmp(sys,"C")) opt->navsys&=~SYS_CMP;
+            else if (!strcmp(sys,"I")) opt->navsys&=~SYS_IRN;
         }
         else if (!strcmp(argv[i],"-d" )&&i+1<argc) {
             *dir=argv[++i];
@@ -423,7 +482,9 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(argv[i],"-h" )&&i+1<argc) ofile[3]=argv[++i];
         else if (!strcmp(argv[i],"-q" )&&i+1<argc) ofile[4]=argv[++i];
         else if (!strcmp(argv[i],"-l" )&&i+1<argc) ofile[5]=argv[++i];
-        else if (!strcmp(argv[i],"-s" )&&i+1<argc) ofile[6]=argv[++i];
+        else if (!strcmp(argv[i],"-b" )&&i+1<argc) ofile[6]=argv[++i];
+        else if (!strcmp(argv[i],"-i" )&&i+1<argc) ofile[7]=argv[++i];
+        else if (!strcmp(argv[i],"-s" )&&i+1<argc) ofile[8]=argv[++i];
         else if (!strcmp(argv[i],"-trace" )&&i+1<argc) {
             *trace=atoi(argv[++i]);
         }
@@ -436,18 +497,19 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
     }
     if (nf>=1) opt->freqtype|=FREQTYPE_L1;
     if (nf>=2) opt->freqtype|=FREQTYPE_L2;
-    if (nf>=3) opt->freqtype|=FREQTYPE_L5;
-    if (nf>=4) opt->freqtype|=FREQTYPE_L6;
-    if (nf>=5) opt->freqtype|=FREQTYPE_L7;
-    if (nf>=6) opt->freqtype|=FREQTYPE_L8;
+    if (nf>=3) opt->freqtype|=FREQTYPE_E5b;
+    if (nf>=4) opt->freqtype|=FREQTYPE_L5;
+    if (nf>=5) opt->freqtype|=FREQTYPE_E6;
+    if (nf>=6) opt->freqtype|=FREQTYPE_E5ab;
+    if (nf>=7) opt->freqtype|=FREQTYPE_S;
     
     if (*fmt) {
         if      (!strcmp(fmt,"rtcm2")) format=STRFMT_RTCM2;
         else if (!strcmp(fmt,"rtcm3")) format=STRFMT_RTCM3;
         else if (!strcmp(fmt,"nov"  )) format=STRFMT_OEM4;
-        else if (!strcmp(fmt,"oem3" )) format=STRFMT_OEM3;
+        else if (!strcmp(fmt,"cnav" )) format=STRFMT_CNAV;
         else if (!strcmp(fmt,"ubx"  )) format=STRFMT_UBX;
-        else if (!strcmp(fmt,"ss2"  )) format=STRFMT_SS2;
+        else if (!strcmp(fmt,"sbp"  )) format=STRFMT_SBP;
         else if (!strcmp(fmt,"hemis")) format=STRFMT_CRES;
         else if (!strcmp(fmt,"stq"  )) format=STRFMT_STQ;
         else if (!strcmp(fmt,"javad")) format=STRFMT_JAVAD;
@@ -455,6 +517,8 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(fmt,"binex")) format=STRFMT_BINEX;
         else if (!strcmp(fmt,"rt17" )) format=STRFMT_RT17;
         else if (!strcmp(fmt,"sbf"  )) format=STRFMT_SEPT;
+        else if (!strcmp(fmt,"cmr"  )) format=STRFMT_CMR;
+        else if (!strcmp(fmt,"tersus")) format=STRFMT_TERSUS;
         else if (!strcmp(fmt,"rinex")) format=STRFMT_RINEX;
     }
     else {
@@ -464,7 +528,7 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(p,".rtcm3"))  format=STRFMT_RTCM3;
         else if (!strcmp(p,".gps"  ))  format=STRFMT_OEM4;
         else if (!strcmp(p,".ubx"  ))  format=STRFMT_UBX;
-        else if (!strcmp(p,".log"  ))  format=STRFMT_SS2;
+        else if (!strcmp(p,".sbp"  ))  format=STRFMT_SBP;
         else if (!strcmp(p,".bin"  ))  format=STRFMT_CRES;
         else if (!strcmp(p,".stq"  ))  format=STRFMT_STQ;
         else if (!strcmp(p,".jps"  ))  format=STRFMT_JAVAD;
@@ -472,6 +536,8 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(p,".binex"))  format=STRFMT_BINEX;
         else if (!strcmp(p,".rt17" ))  format=STRFMT_RT17;
         else if (!strcmp(p,".sbf"  ))  format=STRFMT_SEPT;
+        else if (!strcmp(p,".cmr"  ))  format=STRFMT_CMR;
+        else if (!strcmp(p,".trs"  ))  format=STRFMT_TERSUS;
         else if (!strcmp(p,".obs"  ))  format=STRFMT_RINEX;
         else if (!strcmp(p+3,"o"   ))  format=STRFMT_RINEX;
         else if (!strcmp(p+3,"O"   ))  format=STRFMT_RINEX;
@@ -483,7 +549,7 @@ int main(int argc, char **argv)
 {
     rnxopt_t opt={{0}};
     int format,trace=0,stat;
-    char *ifile="",*ofile[7]={0},*dir="";
+    char *ifile="",*ofile[NOUTFILE]={0},*dir="";
     
     /* parse command line options */
     format=cmdopts(argc,argv,&opt,&ifile,ofile,&dir,&trace);

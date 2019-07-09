@@ -4,9 +4,9 @@ object FileOptDialog: TFileOptDialog
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'File Options'
-  ClientHeight = 73
-  ClientWidth = 384
-  Color = clBtnFace
+  ClientHeight = 77
+  ClientWidth = 399
+  Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -18,16 +18,16 @@ object FileOptDialog: TFileOptDialog
   PixelsPerInch = 96
   TextHeight = 13
   object Label2: TLabel
-    Left = 113
-    Top = 51
+    Left = 109
+    Top = 54
     Width = 8
     Height = 13
     Caption = '+'
     Visible = False
   end
   object Label3: TLabel
-    Left = 179
-    Top = 51
+    Left = 175
+    Top = 54
     Width = 5
     Height = 13
     Caption = 's'
@@ -35,21 +35,21 @@ object FileOptDialog: TFileOptDialog
   end
   object Label5: TLabel
     Left = 178
-    Top = 52
+    Top = 54
     Width = 7
     Height = 13
     Caption = 'H'
   end
   object Label4: TLabel
     Left = 78
-    Top = 52
+    Top = 54
     Width = 49
     Height = 13
     Caption = 'Swap Intv'
   end
   object BtnKey: TSpeedButton
     Left = 194
-    Top = 48
+    Top = 50
     Width = 17
     Height = 22
     Caption = '?'
@@ -57,8 +57,8 @@ object FileOptDialog: TFileOptDialog
     OnClick = BtnKeyClick
   end
   object TimeStart: TEdit
-    Left = 126
-    Top = 48
+    Left = 122
+    Top = 50
     Width = 51
     Height = 21
     TabOrder = 5
@@ -68,11 +68,12 @@ object FileOptDialog: TFileOptDialog
   object Panel1: TPanel
     Left = 0
     Top = 0
-    Width = 384
+    Width = 399
     Height = 43
     Align = alTop
     BevelOuter = bvNone
     TabOrder = 2
+    ExplicitWidth = 384
     object Label1: TLabel
       Left = 8
       Top = 4
@@ -81,7 +82,7 @@ object FileOptDialog: TFileOptDialog
       Caption = 'File Path'
     end
     object BtnFilePath: TButton
-      Left = 357
+      Left = 372
       Top = 17
       Width = 25
       Height = 23
@@ -98,25 +99,25 @@ object FileOptDialog: TFileOptDialog
     object FilePath: TEdit
       Left = 6
       Top = 18
-      Width = 351
+      Width = 365
       Height = 21
       TabOrder = 1
     end
   end
   object BtnCancel: TButton
-    Left = 300
+    Left = 316
     Top = 45
     Width = 81
-    Height = 27
+    Height = 29
     Caption = '&Cancel'
     ModalResult = 2
     TabOrder = 0
   end
   object BtnOk: TButton
-    Left = 216
+    Left = 232
     Top = 45
     Width = 81
-    Height = 27
+    Height = 29
     Caption = '&OK'
     ModalResult = 1
     TabOrder = 1
@@ -124,7 +125,7 @@ object FileOptDialog: TFileOptDialog
   end
   object ChkTimeTag: TCheckBox
     Left = 6
-    Top = 50
+    Top = 52
     Width = 63
     Height = 17
     Caption = 'Time'
@@ -133,7 +134,7 @@ object FileOptDialog: TFileOptDialog
   end
   object TimeSpeed: TComboBox
     Left = 54
-    Top = 48
+    Top = 50
     Width = 51
     Height = 21
     ItemIndex = 3
@@ -151,7 +152,7 @@ object FileOptDialog: TFileOptDialog
   end
   object SwapIntv: TComboBox
     Left = 130
-    Top = 48
+    Top = 50
     Width = 45
     Height = 21
     DropDownCount = 10
@@ -166,6 +167,14 @@ object FileOptDialog: TFileOptDialog
       '6'
       '12'
       '24')
+  end
+  object Chk64Bit: TCheckBox
+    Left = 186
+    Top = 52
+    Width = 41
+    Height = 17
+    Caption = '64bit'
+    TabOrder = 7
   end
   object SaveDialog: TSaveDialog
     Filter = 'All File (*.*)|*.*|Position File (*.pos)|*.pos'
